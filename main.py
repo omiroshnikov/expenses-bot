@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import os
 import datetime as dt
 
@@ -13,43 +14,43 @@ bot = Bot(BOT_TOKEN)
 dp = Dispatcher()
 
 PAY_FROM = [
-    "‘бер Gold",
-    "‘бер 7650",
-    "’инькофф",
-    "€Џ ђахматуллаев",
-    "€Џ ‘аЯпина",
-    "‘бер €Џ “румчи",
-    "‘чет ‘бер физ. лица",
-    "‘бер разные счета",
-    "Ќаличные",
+    "РЎР±РµСЂ Gold",
+    "РЎР±РµСЂ 7650",
+    "РўРёРЅСЊРєРѕС„С„",
+    "РРџ Р Р°С…РјР°С‚СѓР»Р»Р°РµРІ",
+    "РРџ РЎР°СЏРїРёРЅР°",
+    "РЎР±РµСЂ РРџ РЈСЂСѓРјС‡Рё",
+    "РЎС‡РµС‚ РЎР±РµСЂ С„РёР·. Р»РёС†Р°",
+    "РЎР±РµСЂ СЂР°Р·РЅС‹Рµ СЃС‡РµС‚Р°",
+    "РќР°Р»РёС‡РЅС‹Рµ",
 ]
-DEFAULT_PAY_FROM = "‘бер 7650"
+DEFAULT_PAY_FROM = "РЎР±РµСЂ 7650"
 
 CATEGORIES = [
-    "Љафе","Џродукты","‘порт","Љрасота/‡доровье","’ранспорт","ђазвлечениЯ","Ђвто","Џодарки",
-    "Љвартира","Ђлименты","Љредит","€нвестиции","Џрочее","’ел. + инет + подписки",
-    "Ѓанк. комиссиЯ","„ети","Џлутон","Ћдежда","ЏутешествиЯ","Ћтдал †ене","Љниги","Ozon","Ћбучение",
+    "РљР°С„Рµ","РџСЂРѕРґСѓРєС‚С‹","РЎРїРѕСЂС‚","РљСЂР°СЃРѕС‚Р°/Р—РґРѕСЂРѕРІСЊРµ","РўСЂР°РЅСЃРїРѕСЂС‚","Р Р°Р·РІР»РµС‡РµРЅРёСЏ","РђРІС‚Рѕ","РџРѕРґР°СЂРєРё",
+    "РљРІР°СЂС‚РёСЂР°","РђР»РёРјРµРЅС‚С‹","РљСЂРµРґРёС‚","РРЅРІРµСЃС‚РёС†РёРё","РџСЂРѕС‡РµРµ","РўРµР». + РёРЅРµС‚ + РїРѕРґРїРёСЃРєРё",
+    "Р‘Р°РЅРє. РєРѕРјРёСЃСЃРёСЏ","Р”РµС‚Рё","РџР»СѓС‚РѕРЅ","РћРґРµР¶РґР°","РџСѓС‚РµС€РµСЃС‚РІРёСЏ","РћС‚РґР°Р» Р–РµРЅРµ","РљРЅРёРіРё","Ozon","РћР±СѓС‡РµРЅРёРµ",
 ]
 
 class Form(StatesGroup):
     date = State()
-    # дальше добавим name/amount/category/payfrom/note/confirm
+    # РґР°Р»СЊС€Рµ РґРѕР±Р°РІРёРј name/amount/category/payfrom/note/confirm
 
 def only_admin(user_id: int) -> bool:
     return user_id == ADMIN_ID
 
 def kb_main() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="заполнить", callback_data="fill")],
-        [InlineKeyboardButton(text="отмена", callback_data="cancel")],
+        [InlineKeyboardButton(text="Р·Р°РїРѕР»РЅРёС‚СЊ", callback_data="fill")],
+        [InlineKeyboardButton(text="РѕС‚РјРµРЅР°", callback_data="cancel")],
     ])
 
 def kb_date() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="сегоднЯ", callback_data="date:today"),
-         InlineKeyboardButton(text="вчера", callback_data="date:yday")],
-        [InlineKeyboardButton(text="ввести вручную (ддммгг)", callback_data="date:manual")],
-        [InlineKeyboardButton(text="отмена", callback_data="cancel")],
+        [InlineKeyboardButton(text="СЃРµРіРѕРґРЅСЏ", callback_data="date:today"),
+         InlineKeyboardButton(text="РІС‡РµСЂР°", callback_data="date:yday")],
+        [InlineKeyboardButton(text="РІРІРµСЃС‚Рё РІСЂСѓС‡РЅСѓСЋ (РґРґРјРјРіРі)", callback_data="date:manual")],
+        [InlineKeyboardButton(text="РѕС‚РјРµРЅР°", callback_data="cancel")],
     ])
 
 def fmt_ddmmyy(d: dt.date) -> str:
@@ -60,7 +61,7 @@ async def start(m: Message, state: FSMContext):
     if not only_admin(m.from_user.id):
         return
     await state.clear()
-    await m.answer("ок. жми ЗзаполнитьИ или пиши строкой через ;", reply_markup=kb_main())
+    await m.answer("РѕРє. Р¶РјРё В«Р·Р°РїРѕР»РЅРёС‚СЊВ» РёР»Рё РїРёС€Рё СЃС‚СЂРѕРєРѕР№ С‡РµСЂРµР· ;", reply_markup=kb_main())
 
 @dp.callback_query(F.data == "fill")
 async def fill(c: CallbackQuery, state: FSMContext):
@@ -68,7 +69,7 @@ async def fill(c: CallbackQuery, state: FSMContext):
         return
     await state.clear()
     await state.set_state(Form.date)
-    await c.message.answer("дата?", reply_markup=kb_date())
+    await c.message.answer("РґР°С‚Р°?", reply_markup=kb_date())
     await c.answer()
 
 @dp.callback_query(F.data.startswith("date:"))
@@ -80,13 +81,13 @@ async def pick_date(c: CallbackQuery, state: FSMContext):
 
     if v == "today":
         await state.update_data(date=fmt_ddmmyy(today))
-        await c.message.answer(f"дата ок: {fmt_ddmmyy(today)}. дальше будет ЗнаименованиеИ (следующий кусок).")
+        await c.message.answer(f"РґР°С‚Р° РѕРє: {fmt_ddmmyy(today)}. РґР°Р»СЊС€Рµ Р±СѓРґРµС‚ В«РЅР°РёРјРµРЅРѕРІР°РЅРёРµВ» (СЃР»РµРґСѓСЋС‰РёР№ РєСѓСЃРѕРє).")
     elif v == "yday":
         d = today - dt.timedelta(days=1)
         await state.update_data(date=fmt_ddmmyy(d))
-        await c.message.answer(f"дата ок: {fmt_ddmmyy(d)}. дальше будет ЗнаименованиеИ (следующий кусок).")
+        await c.message.answer(f"РґР°С‚Р° РѕРє: {fmt_ddmmyy(d)}. РґР°Р»СЊС€Рµ Р±СѓРґРµС‚ В«РЅР°РёРјРµРЅРѕРІР°РЅРёРµВ» (СЃР»РµРґСѓСЋС‰РёР№ РєСѓСЃРѕРє).")
     else:
-        await c.message.answer("введи дату в формате ддммгг, пример: 050126")
+        await c.message.answer("РІРІРµРґРё РґР°С‚Сѓ РІ С„РѕСЂРјР°С‚Рµ РґРґРјРјРіРі, РїСЂРёРјРµСЂ: 050126")
 
     await c.answer()
 
@@ -96,16 +97,16 @@ async def manual_date(m: Message, state: FSMContext):
         return
     t = "".join(ch for ch in (m.text or "").strip() if ch.isdigit())
     if len(t) != 6:
-        await m.answer("не то. надо ровно 6 цифр: ддммгг (пример 050126).")
+        await m.answer("РЅРµ С‚Рѕ. РЅР°РґРѕ СЂРѕРІРЅРѕ 6 С†РёС„СЂ: РґРґРјРјРіРі (РїСЂРёРјРµСЂ 050126).")
         return
     await state.update_data(date=t)
-    await m.answer(f"дата ок: {t}. дальше будет ЗнаименованиеИ (следующий кусок).")
+    await m.answer(f"РґР°С‚Р° РѕРє: {t}. РґР°Р»СЊС€Рµ Р±СѓРґРµС‚ В«РЅР°РёРјРµРЅРѕРІР°РЅРёРµВ» (СЃР»РµРґСѓСЋС‰РёР№ РєСѓСЃРѕРє).")
 
 @dp.callback_query(F.data == "cancel")
 async def cancel(c: CallbackQuery, state: FSMContext):
     if only_admin(c.from_user.id):
         await state.clear()
-        await c.message.answer("отменено.", reply_markup=kb_main())
+        await c.message.answer("РѕС‚РјРµРЅРµРЅРѕ.", reply_markup=kb_main())
     await c.answer()
 
 async def main():
