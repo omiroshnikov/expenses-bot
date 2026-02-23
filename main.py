@@ -6,8 +6,8 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import StatesGroup, State
-from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 ADMIN_ID = int(os.environ["ADMIN_ID"])
@@ -50,21 +50,31 @@ def fmt_ddmmyy(d: dt.date) -> str:
     return d.strftime("%d%m%y")
 
 
+@dp.errors()
+async def on_error(event, exception):
+    # чтобы видеть причину в render logs
+    print("AIROGRAM_ERROR:", repr(exception))
+    return True
+
+
 @dp.message(F.text == "/start")
 async def start(m: Message, state: FSMContext):
     if not only_admin(m.from_user.id):
         return
     await state.clear()
-    await m.answer("ок. жми «заполнить» или пиши строкой через ;", reply_markup=kb_main())
+    await m.answer("ок. жми «заполнить»", reply_markup=kb_main())
 
 
 @dp.callback_query(F.data == "fill")
 async def fill(c: CallbackQuery, state: FSMContext):
     if not only_admin(c.from_user.id):
         return
+    print("FILL_CLICKED from", c.from_user.id)  # <- увидишь в логах
     await state.clear()
     await state.set_state(Form.date)
-    await c.message.answer("дата расхода?", reply_markup=kb_date())
+
+    # 1) сообщение-пинг (чтобы ты видел, что хендлер точно сработал)
+    await c.message.answer("вижу клик. выбирай дату:", reply_markup=kb_date())
     await c.answer()
 
 
@@ -79,11 +89,11 @@ async def pick_date(c: CallbackQuery, state: FSMContext):
     if v == "today":
         date = fmt_ddmmyy(today)
         await state.update_data(date=date)
-        await c.message.answer(f"ок дата: {date}\nследующий шаг - наименование (добавим дальше).")
+        await c.message.answer(f"ок дата: {date}")
     elif v == "yday":
         date = fmt_ddmmyy(today - dt.timedelta(days=1))
         await state.update_data(date=date)
-        await c.message.answer(f"ок дата: {date}\nследующий шаг - наименование (добавим дальше).")
+        await c.message.answer(f"ок дата: {date}")
     else:
         await c.message.answer("введи дату в формате ддммгг (пример 050126)")
 
@@ -97,11 +107,11 @@ async def manual_date(m: Message, state: FSMContext):
 
     t = "".join(ch for ch in (m.text or "").strip() if ch.isdigit())
     if len(t) != 6:
-        await m.answer("не то. нужно 6 цифр: ддммгг (пример 050126).")
+        await m.answer("нужно 6 цифр: ддммгг (пример 050126).")
         return
 
     await state.update_data(date=t)
-    await m.answer(f"ок дата: {t}\nследующий шаг - наименование (добавим дальше).")
+    await m.answer(f"ок дата: {t}")
 
 
 @dp.callback_query(F.data == "cancel")
@@ -114,10 +124,10 @@ async def cancel(c: CallbackQuery, state: FSMContext):
 
 async def on_startup(app: web.Application):
     if not WEBHOOK_URL:
-        print("no RENDER_EXTERNAL_URL - set it in env")
+        print("NO RENDER_EXTERNAL_URL - set it in env")
         return
     await bot.set_webhook(WEBHOOK_URL, drop_pending_updates=True)
-    print(f"webhook set: {WEBHOOK_URL}")
+    print(f"WEBHOOK_SET: {WEBHOOK_URL}")
 
 
 async def on_shutdown(app: web.Application):
