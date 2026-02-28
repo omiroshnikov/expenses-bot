@@ -3,7 +3,12 @@ import json
 from aiohttp import web
 
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo
+from aiogram.types import (
+    Message,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+    WebAppInfo,
+)
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
@@ -24,6 +29,7 @@ def only_admin(user_id: int) -> bool:
 
 
 def kb_main():
+    # одна кнопка, без "отмена" - чтоб не путать старые сообщения
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="заполнить", web_app=WebAppInfo(url=WEBAPP_URL))],
     ])
@@ -33,6 +39,7 @@ def kb_main():
 async def start(m: Message):
     if not only_admin(m.from_user.id):
         return
+    print("IN_MSG:", m.from_user.id, repr(m.text))
     await m.answer("ок. жми «заполнить»", reply_markup=kb_main())
 
 
@@ -41,13 +48,15 @@ async def on_webapp_data(m: Message):
     if not only_admin(m.from_user.id):
         return
 
+    raw = m.web_app_data.data or ""
+    print("WEBAPP_DATA:", raw)
+
     try:
-        payload = json.loads(m.web_app_data.data or "{}")
+        payload = json.loads(raw or "{}")
     except Exception:
         await m.answer("ошибка: не смог прочитать данные формы")
         return
 
-    # rn просто показываем, что оно прилетело
     await m.answer(
         "принято:\n"
         f"дата: {payload.get('date')}\n"
@@ -61,21 +70,22 @@ async def on_webapp_data(m: Message):
 
 async def on_startup(app: web.Application):
     if not WEBHOOK_URL:
-        print("NO WEBHOOK_URL")
+        print("NO WEBHOOK_URL (set RENDER_EXTERNAL_URL)")
         return
+
     await bot.set_webhook(
         WEBHOOK_URL,
         drop_pending_updates=True,
-        allowed_updates=["message", "callback_query", "web_app_data"],
+        allowed_updates=["message", "callback_query"],  # web_app_data прилетает как message
     )
     print("WEBHOOK_SET:", WEBHOOK_URL)
+    print("WEBAPP_URL:", WEBAPP_URL)
 
 
 def main():
     app = web.Application()
     app.on_startup.append(on_startup)
 
-    # webapp page
     async def app_page(_req: web.Request):
         return web.FileResponse("webapp.html")
 
