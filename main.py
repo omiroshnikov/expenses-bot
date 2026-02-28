@@ -2,11 +2,17 @@ import os
 from aiohttp import web
 
 from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import (
+    Message,
+    CallbackQuery,
+    InlineKeyboardMarkup,
+    InlineKeyboardButton,
+)
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
+ADMIN_ID = int(os.environ["ADMIN_ID"])  # твой телеграм id
 
 BASE_URL = os.environ.get("RENDER_EXTERNAL_URL", "").rstrip("/")
 WEBHOOK_PATH = "/tg"
@@ -16,26 +22,52 @@ bot = Bot(BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
 
+def only_admin(user_id: int) -> bool:
+    return user_id == ADMIN_ID
+
+
 def kb_main():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="заполнить", callback_data="fill")],
+        [InlineKeyboardButton(text="отмена", callback_data="cancel")],
     ])
 
 
 @dp.message()
 async def any_message(m: Message):
-    # это должно быть видно в render logs
-    print("IN_MSG:", m.from_user.id, repr(m.text))
-    if (m.text or "").strip() == "/start":
-        await m.answer("alive. жми «заполнить»", reply_markup=kb_main())
-    else:
-        await m.answer("alive.")
+    txt = (m.text or "").strip()
+    print("IN_MSG:", m.from_user.id, repr(txt))
+
+    if not only_admin(m.from_user.id):
+        # молча игнорим всех, кроме тебя
+        return
+
+    if txt == "/start":
+        await m.answer("ок. жми «заполнить»", reply_markup=kb_main())
+        return
+
+    # на всё остальное просто подтверждаем "alive"
+    await m.answer("alive.")
 
 
 @dp.callback_query()
 async def any_callback(c: CallbackQuery):
     print("IN_CB:", c.from_user.id, c.data)
-    await c.answer("alive_cb", show_alert=False)
+
+    if not only_admin(c.from_user.id):
+        await c.answer()
+        return
+
+    if c.data == "fill":
+        await c.message.answer("вижу клик. дальше докрутим форму.")
+        await c.answer()
+        return
+
+    if c.data == "cancel":
+        await c.answer("ок", show_alert=False)
+        return
+
+    await c.answer()
 
 
 async def on_startup(app: web.Application):
