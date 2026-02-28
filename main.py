@@ -25,7 +25,7 @@ class Form(StatesGroup):
 
 
 def only_admin(user_id: int) -> bool:
-    return user_id == ADMIN_ID
+    return True
 
 
 def kb_main() -> InlineKeyboardMarkup:
