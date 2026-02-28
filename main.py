@@ -27,6 +27,7 @@ dp = Dispatcher(storage=MemoryStorage())
 
 class Form(StatesGroup):
     date = State()
+    name = State()
 
 
 def only_admin(user_id: int) -> bool:
@@ -57,24 +58,17 @@ def kb_date():
 
 @dp.message(F.text == "/start")
 async def start(m: Message, state: FSMContext):
-    txt = (m.text or "").strip()
-    print("IN_MSG:", m.from_user.id, repr(txt))
-
     if not only_admin(m.from_user.id):
         return
-
     await state.clear()
     await m.answer("ок. жми «заполнить»", reply_markup=kb_main())
 
 
 @dp.callback_query(F.data == "fill")
 async def fill(c: CallbackQuery, state: FSMContext):
-    print("IN_CB:", c.from_user.id, c.data)
-
     if not only_admin(c.from_user.id):
         await c.answer()
         return
-
     await state.clear()
     await state.set_state(Form.date)
     await c.message.answer("дата расхода?", reply_markup=kb_date())
@@ -83,8 +77,6 @@ async def fill(c: CallbackQuery, state: FSMContext):
 
 @dp.callback_query(F.data.startswith("date:"))
 async def pick_date(c: CallbackQuery, state: FSMContext):
-    print("IN_CB:", c.from_user.id, c.data)
-
     if not only_admin(c.from_user.id):
         await c.answer()
         return
@@ -94,43 +86,58 @@ async def pick_date(c: CallbackQuery, state: FSMContext):
 
     if v == "today":
         date = fmt_ddmmyy(today)
-        await state.update_data(date=date)
-        await c.message.answer(f"ок дата: {date}")
     elif v == "yday":
         date = fmt_ddmmyy(today - dt.timedelta(days=1))
-        await state.update_data(date=date)
-        await c.message.answer(f"ок дата: {date}")
     else:
         await c.message.answer("введи дату в формате ддммгг (пример 050126)")
+        await c.answer()
+        return
 
+    await state.update_data(date=date)
+    await state.set_state(Form.name)
+    await c.message.answer(f"дата: {date}\nвведи наименование (например: падел)")
     await c.answer()
 
 
 @dp.message(Form.date)
 async def manual_date(m: Message, state: FSMContext):
-    txt = (m.text or "").strip()
-    print("IN_MSG:", m.from_user.id, repr(txt))
-
     if not only_admin(m.from_user.id):
         return
 
-    t = "".join(ch for ch in txt if ch.isdigit())
-    if len(t) != 6:
-        await m.answer("не то. нужно 6 цифр: ддммгг (пример 050126).")
+    txt = "".join(ch for ch in (m.text or "") if ch.isdigit())
+    if len(txt) != 6:
+        await m.answer("нужно 6 цифр: ддммгг (пример 050126)")
         return
 
-    await state.update_data(date=t)
-    await m.answer(f"ок дата: {t}")
+    await state.update_data(date=txt)
+    await state.set_state(Form.name)
+    await m.answer(f"дата: {txt}\nвведи наименование")
+
+
+@dp.message(Form.name)
+async def get_name(m: Message, state: FSMContext):
+    if not only_admin(m.from_user.id):
+        return
+
+    name = (m.text or "").strip()
+    if not name:
+        await m.answer("наименование не может быть пустым.")
+        return
+
+    data = await state.get_data()
+    date = data.get("date")
+
+    await state.update_data(name=name)
+
+    await m.answer(f"дата: {date}\nнаименование: {name}\n(дальше добавим сумму)")
+    # пока не переходим дальше — тестируем
 
 
 @dp.callback_query(F.data == "cancel")
 async def cancel(c: CallbackQuery, state: FSMContext):
-    print("IN_CB:", c.from_user.id, c.data)
-
     if not only_admin(c.from_user.id):
         await c.answer()
         return
-
     await state.clear()
     await c.message.answer("отменено.", reply_markup=kb_main())
     await c.answer()
@@ -138,14 +145,12 @@ async def cancel(c: CallbackQuery, state: FSMContext):
 
 async def on_startup(app: web.Application):
     if not WEBHOOK_URL:
-        print("NO WEBHOOK_URL (set RENDER_EXTERNAL_URL)")
         return
     await bot.set_webhook(
         WEBHOOK_URL,
         drop_pending_updates=True,
         allowed_updates=["message", "callback_query"],
     )
-    print("WEBHOOK_SET:", WEBHOOK_URL)
 
 
 def main():
