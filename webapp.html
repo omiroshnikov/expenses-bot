@@ -17,15 +17,11 @@
 <body>
   <h3>расход</h3>
 
-  <div class="row">
-    <div>
-      <label>дата</label>
-      <input id="date" type="date" />
-      <div class="row" style="margin-top:8px">
-        <button id="btn_today" type="button">сегодня</button>
-        <button id="btn_yday" type="button">вчера</button>
-      </div>
-    </div>
+  <label>дата</label>
+  <input id="date" type="date" />
+  <div class="row" style="margin-top:8px">
+    <button id="btn_today" type="button">сегодня</button>
+    <button id="btn_yday" type="button">вчера</button>
   </div>
 
   <label>наименование</label>
@@ -44,7 +40,7 @@
   <input id="note" placeholder="" />
 
   <button id="submit" type="button" style="margin-top:14px">отправить</button>
-  <div class="muted">данные уйдут боту одним пакетом</div>
+  <div class="muted">клик должен показать alert "отправлено"</div>
 
 <script>
   const tg = window.Telegram?.WebApp;
@@ -114,6 +110,27 @@
     $date.value = `${yyyy}-${mm}-${dd}`;
   }
 
+  function buildPayload() {
+    return {
+      date: $date.value,                 // yyyy-mm-dd
+      name: ($name.value||"").trim(),
+      amount: ($amount.value||"").trim(),
+      category: $category.value,
+      payFrom: $payfrom.value,
+      note: ($note.value||"").trim(),
+    };
+  }
+
+  function send() {
+    const payload = buildPayload();
+    if (!payload.name) { alert("наименование пустое"); return; }
+    if (!tg?.sendData) { alert("tg.sendData недоступен"); return; }
+
+    tg.sendData(JSON.stringify(payload));
+    alert("отправлено");
+    // tg.close(); // rn не закрываем, пока дебажим
+  }
+
   // defaults
   setDate(new Date());
   fillSelect($payfrom, payFromOptions, "Сбер 7650");
@@ -124,25 +141,15 @@
     const d = new Date(); d.setDate(d.getDate()-1); setDate(d);
   };
 
-  document.getElementById("submit").onclick = () => {
-    const payload = {
-      date: $date.value,        // yyyy-mm-dd
-      name: ($name.value||"").trim(),
-      amount: ($amount.value||"").trim(),
-      category: $category.value,
-      payFrom: $payfrom.value,
-      note: ($note.value||"").trim(),
-    };
+  // кнопка в форме
+  document.getElementById("submit").onclick = send;
 
-    if (!payload.name) { alert("наименование пустое"); return; }
-
-    if (tg?.sendData) {
-      tg.sendData(JSON.stringify(payload));
-      tg.close();
-    } else {
-      alert("telegram webapp api не доступен");
-    }
-  };
+  // главная кнопка телеги (надёжнее, чем обычная)
+  if (tg?.MainButton) {
+    tg.MainButton.setText("отправить");
+    tg.MainButton.show();
+    tg.MainButton.onClick(send);
+  }
 </script>
 </body>
 </html>
