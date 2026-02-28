@@ -4,152 +4,113 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>расход</title>
-  <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
-    body { font-family: -apple-system, system-ui, sans-serif; padding: 16px; }
-    label { display:block; margin: 12px 0 6px; }
-    input, select, button { width: 100%; padding: 10px; font-size: 16px; }
+    body { font-family: -apple-system, system-ui, sans-serif; padding: 14px; }
+    label { display:block; margin: 10px 0 6px; opacity:.8; }
+    input, select, button { width:100%; padding:12px; font-size:16px; }
     .row { display:flex; gap:10px; }
-    .row > * { flex:1; }
-    .muted { opacity:.7; font-size:13px; margin-top:8px; }
+    .row button { width:50%; }
+    button { margin-top: 14px; }
   </style>
 </head>
 <body>
-  <h3>расход</h3>
+  <h2>расход</h2>
 
   <label>дата</label>
   <input id="date" type="date" />
-  <div class="row" style="margin-top:8px">
-    <button id="btn_today" type="button">сегодня</button>
-    <button id="btn_yday" type="button">вчера</button>
+
+  <div class="row">
+    <button type="button" id="today">сегодня</button>
+    <button type="button" id="yesterday">вчера</button>
   </div>
 
   <label>наименование</label>
-  <input id="name" placeholder="падел" />
+  <input id="name" placeholder="кофе" />
 
   <label>сумма</label>
-  <input id="amount" inputmode="decimal" placeholder="5500" />
+  <input id="amount" inputmode="decimal" placeholder="460" />
 
   <label>категория</label>
-  <select id="category"></select>
+  <select id="category">
+    <option value="">-</option>
+    <option>кафе</option><option>продукты</option><option>спорт</option><option>красота/здоровье</option>
+    <option>транспорт</option><option>развлечения</option><option>авто</option><option>подарки</option>
+    <option>квартира</option><option>алименты</option><option>кредит</option><option>инвестиции</option>
+    <option>прочее</option><option>тел. + инет + подписки</option><option>банк. комиссия</option><option>дети</option>
+    <option>плутон</option><option>одежда</option><option>путешествия</option><option>отдал жене</option>
+    <option>книги</option><option>ozon</option><option>обучение</option>
+  </select>
 
   <label>откуда платил</label>
-  <select id="payfrom"></select>
+  <select id="payFrom">
+    <option>сбер 7650</option>
+    <option>сбер gold</option>
+    <option>тинькофф</option>
+    <option>ип рахматуллаев</option>
+    <option>ип саяпина</option>
+    <option>сбер ип урумчи</option>
+    <option>счет сбер физ. лица</option>
+    <option>сбер разные счета</option>
+    <option>наличные</option>
+  </select>
 
   <label>примечание</label>
   <input id="note" placeholder="" />
 
-  <button id="submit" type="button" style="margin-top:14px">отправить</button>
-  <div class="muted">клик должен показать alert "отправлено"</div>
+  <button type="button" id="send">отправить</button>
 
-<script>
-  const tg = window.Telegram?.WebApp;
-  if (tg) { tg.ready(); tg.expand(); }
+  <script>
+    const tg = window.Telegram?.WebApp;
 
-  const payFromOptions = [
-    "Сбер Gold",
-    "Сбер 7650",
-    "Тинькофф",
-    "ИП Рахматуллаев",
-    "ИП Саяпина",
-    "Сбер ИП Урумчи",
-    "Счет Сбер физ. лица",
-    "Сбер разные счета",
-    "Наличные"
-  ];
-
-  const categoryOptions = [
-    "",
-    "Кафе",
-    "Продукты",
-    "Спорт",
-    "Красота/Здоровье",
-    "Транспорт",
-    "Развлечения",
-    "Авто",
-    "Подарки",
-    "Квартира",
-    "Алименты",
-    "Кредит",
-    "Инвестиции",
-    "Прочее",
-    "Тел. + инет + подписки",
-    "Банк. комиссия",
-    "Дети",
-    "Плутон",
-    "Одежда",
-    "Путешествия",
-    "Отдал Жене",
-    "Книги",
-    "Ozon",
-    "Обучение"
-  ];
-
-  function fillSelect(sel, options, defVal) {
-    sel.innerHTML = "";
-    for (const v of options) {
-      const opt = document.createElement("option");
-      opt.value = v;
-      opt.textContent = v === "" ? "—" : v;
-      sel.appendChild(opt);
+    function iso(d){
+      const z = n => String(n).padStart(2,'0');
+      return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`;
     }
-    sel.value = defVal ?? "";
-  }
 
-  const $date = document.getElementById("date");
-  const $name = document.getElementById("name");
-  const $amount = document.getElementById("amount");
-  const $category = document.getElementById("category");
-  const $payfrom = document.getElementById("payfrom");
-  const $note = document.getElementById("note");
+    // init
+    const d0 = new Date();
+    document.getElementById('date').value = iso(d0);
 
-  function setDate(d) {
-    const yyyy = d.getFullYear();
-    const mm = String(d.getMonth()+1).padStart(2,"0");
-    const dd = String(d.getDate()).padStart(2,"0");
-    $date.value = `${yyyy}-${mm}-${dd}`;
-  }
-
-  function buildPayload() {
-    return {
-      date: $date.value,                 // yyyy-mm-dd
-      name: ($name.value||"").trim(),
-      amount: ($amount.value||"").trim(),
-      category: $category.value,
-      payFrom: $payfrom.value,
-      note: ($note.value||"").trim(),
+    document.getElementById('today').onclick = () => {
+      document.getElementById('date').value = iso(new Date());
     };
-  }
+    document.getElementById('yesterday').onclick = () => {
+      const d = new Date(); d.setDate(d.getDate()-1);
+      document.getElementById('date').value = iso(d);
+    };
 
-  function send() {
-    const payload = buildPayload();
-    if (!payload.name) { alert("наименование пустое"); return; }
-    if (!tg?.sendData) { alert("tg.sendData недоступен"); return; }
+    if (tg){
+      tg.ready();
+      // убираем telegram main button, чтобы не было 2х отправить
+      tg.MainButton.hide();
+      tg.expand();
+    }
 
-    tg.sendData(JSON.stringify(payload));
-    alert("отправлено");
-    // tg.close(); // rn не закрываем, пока дебажим
-  }
+    document.getElementById('send').onclick = () => {
+      const payload = {
+        date: document.getElementById('date').value,
+        name: document.getElementById('name').value.trim(),
+        amount: document.getElementById('amount').value.trim(),
+        category: document.getElementById('category').value.trim(),
+        payFrom: document.getElementById('payFrom').value.trim(),
+        note: document.getElementById('note').value.trim(),
+      };
 
-  // defaults
-  setDate(new Date());
-  fillSelect($payfrom, payFromOptions, "Сбер 7650");
-  fillSelect($category, categoryOptions, "");
+      if (!payload.name){
+        alert("введи наименование");
+        return;
+      }
 
-  document.getElementById("btn_today").onclick = () => setDate(new Date());
-  document.getElementById("btn_yday").onclick = () => {
-    const d = new Date(); d.setDate(d.getDate()-1); setDate(d);
-  };
+      if (!tg){
+        alert("telegram webapp api не найден (открой внутри телеги)");
+        return;
+      }
 
-  // кнопка в форме
-  document.getElementById("submit").onclick = send;
-
-  // главная кнопка телеги (надёжнее, чем обычная)
-  if (tg?.MainButton) {
-    tg.MainButton.setText("отправить");
-    tg.MainButton.show();
-    tg.MainButton.onClick(send);
-  }
-</script>
+      // вот ГЛАВНОЕ: отправка данных в бот
+      tg.sendData(JSON.stringify(payload));
+      alert("отправлено");
+      tg.close();
+    };
+  </script>
 </body>
 </html>
