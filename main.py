@@ -24,7 +24,6 @@ GAS_EXEC_URL = os.environ.get("GAS_EXEC_URL", "").strip()
 
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
-http = ClientSession()
 
 
 def only_admin(user_id: int) -> bool:
@@ -83,13 +82,11 @@ async def on_webapp_data(m: Message):
         await m.answer("ошибка: пустое наименование")
         return
 
-    # строка в формате твоего старого бота
     line = ";".join([ddmmyy, name, amount, category, pay_from, note]).rstrip(";")
 
-    # фейкаем телеграм update для твоего apps script doPost(e)
     update = {
         "message": {
-            "message_id": m.message_id,  # для дедупа в GAS
+            "message_id": m.message_id,
             "text": line,
             "chat": {"id": m.chat.id},
             "from": {
@@ -102,17 +99,18 @@ async def on_webapp_data(m: Message):
     }
 
     try:
-        async with http.post(
-            GAS_EXEC_URL,
-            data=json.dumps(update),
-            headers={"Content-Type": "application/json"},
-            timeout=20,
-        ) as resp:
-            body = await resp.text()
-            print("GAS_RESP:", resp.status, body[:200])
-            if resp.status != 200:
-                await m.answer(f"ошибка: gas вернул {resp.status}")
-                return
+        async with ClientSession() as http:
+            async with http.post(
+                GAS_EXEC_URL,
+                data=json.dumps(update),
+                headers={"Content-Type": "application/json"},
+                timeout=20,
+            ) as resp:
+                body = await resp.text()
+                print("GAS_RESP:", resp.status, body[:200])
+                if resp.status != 200:
+                    await m.answer(f"ошибка: gas вернул {resp.status}")
+                    return
     except Exception as e:
         await m.answer(f"ошибка: не достучался до gas: {e}")
         return
@@ -128,20 +126,15 @@ async def on_startup(app: web.Application):
     await bot.set_webhook(
         WEBHOOK_URL,
         drop_pending_updates=True,
-        allowed_updates=["message", "callback_query"],
+        allowed_updates=["message", "callback_query", "web_app_data"],
     )
     print("WEBHOOK_SET:", WEBHOOK_URL)
     print("WEBAPP_URL:", WEBAPP_URL)
 
 
-async def on_cleanup(app: web.Application):
-    await http.close()
-
-
 def main():
     app = web.Application()
     app.on_startup.append(on_startup)
-    app.on_cleanup.append(on_cleanup)
 
     async def app_page(_req: web.Request):
         return web.FileResponse("webapp.html")
