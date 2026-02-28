@@ -4,15 +4,20 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>расход</title>
+
+  <!-- важно: sdk телеги -->
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
   <style>
     body { font-family: -apple-system, system-ui, sans-serif; padding: 14px; }
     label { display:block; margin: 10px 0 6px; opacity:.8; }
-    input, select, button { width:100%; padding:12px; font-size:16px; }
-    .row { display:flex; gap:10px; }
+    input, select, button { width:100%; padding:12px; font-size:16px; box-sizing:border-box; }
+    .row { display:flex; gap:10px; margin-top:10px; }
     .row button { width:50%; }
     button { margin-top: 14px; }
   </style>
 </head>
+
 <body>
   <h2>расход</h2>
 
@@ -67,13 +72,13 @@
       return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`;
     }
 
-    // init
-    const d0 = new Date();
-    document.getElementById('date').value = iso(d0);
+    // init date today
+    document.getElementById('date').value = iso(new Date());
 
     document.getElementById('today').onclick = () => {
       document.getElementById('date').value = iso(new Date());
     };
+
     document.getElementById('yesterday').onclick = () => {
       const d = new Date(); d.setDate(d.getDate()-1);
       document.getElementById('date').value = iso(d);
@@ -81,8 +86,7 @@
 
     if (tg){
       tg.ready();
-      // убираем telegram main button, чтобы не было 2х отправить
-      tg.MainButton.hide();
+      tg.MainButton.hide(); // чтобы не было второй “отправить”
       tg.expand();
     }
 
@@ -106,7 +110,6 @@
         return;
       }
 
-      // вот ГЛАВНОЕ: отправка данных в бот
       tg.sendData(JSON.stringify(payload));
       alert("отправлено");
       tg.close();
