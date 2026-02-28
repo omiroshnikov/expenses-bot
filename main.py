@@ -1,4 +1,5 @@
 import os
+import datetime as dt
 from aiohttp import web
 
 from aiogram import Bot, Dispatcher, F
@@ -9,10 +10,12 @@ from aiogram.types import (
     InlineKeyboardButton,
 )
 from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import StatesGroup, State
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
-ADMIN_ID = int(os.environ["ADMIN_ID"])  # твой телеграм id
+ADMIN_ID = int(os.environ["ADMIN_ID"])
 
 BASE_URL = os.environ.get("RENDER_EXTERNAL_URL", "").rstrip("/")
 WEBHOOK_PATH = "/tg"
@@ -22,8 +25,16 @@ bot = Bot(BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 
 
+class Form(StatesGroup):
+    date = State()
+
+
 def only_admin(user_id: int) -> bool:
     return user_id == ADMIN_ID
+
+
+def fmt_ddmmyy(d: dt.date) -> str:
+    return d.strftime("%d%m%y")
 
 
 def kb_main():
@@ -33,40 +44,95 @@ def kb_main():
     ])
 
 
-@dp.message()
-async def any_message(m: Message):
+def kb_date():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="сегодня", callback_data="date:today"),
+            InlineKeyboardButton(text="вчера", callback_data="date:yday"),
+        ],
+        [InlineKeyboardButton(text="ввести вручную (ддммгг)", callback_data="date:manual")],
+        [InlineKeyboardButton(text="отмена", callback_data="cancel")],
+    ])
+
+
+@dp.message(F.text == "/start")
+async def start(m: Message, state: FSMContext):
     txt = (m.text or "").strip()
     print("IN_MSG:", m.from_user.id, repr(txt))
 
     if not only_admin(m.from_user.id):
-        # молча игнорим всех, кроме тебя
         return
 
-    if txt == "/start":
-        await m.answer("ок. жми «заполнить»", reply_markup=kb_main())
-        return
-
-    # на всё остальное просто подтверждаем "alive"
-    await m.answer("alive.")
+    await state.clear()
+    await m.answer("ок. жми «заполнить»", reply_markup=kb_main())
 
 
-@dp.callback_query()
-async def any_callback(c: CallbackQuery):
+@dp.callback_query(F.data == "fill")
+async def fill(c: CallbackQuery, state: FSMContext):
     print("IN_CB:", c.from_user.id, c.data)
 
     if not only_admin(c.from_user.id):
         await c.answer()
         return
 
-    if c.data == "fill":
-        await c.message.answer("вижу клик. дальше докрутим форму.")
+    await state.clear()
+    await state.set_state(Form.date)
+    await c.message.answer("дата расхода?", reply_markup=kb_date())
+    await c.answer()
+
+
+@dp.callback_query(F.data.startswith("date:"))
+async def pick_date(c: CallbackQuery, state: FSMContext):
+    print("IN_CB:", c.from_user.id, c.data)
+
+    if not only_admin(c.from_user.id):
         await c.answer()
         return
 
-    if c.data == "cancel":
-        await c.answer("ок", show_alert=False)
+    v = c.data.split(":", 1)[1]
+    today = dt.date.today()
+
+    if v == "today":
+        date = fmt_ddmmyy(today)
+        await state.update_data(date=date)
+        await c.message.answer(f"ок дата: {date}")
+    elif v == "yday":
+        date = fmt_ddmmyy(today - dt.timedelta(days=1))
+        await state.update_data(date=date)
+        await c.message.answer(f"ок дата: {date}")
+    else:
+        await c.message.answer("введи дату в формате ддммгг (пример 050126)")
+
+    await c.answer()
+
+
+@dp.message(Form.date)
+async def manual_date(m: Message, state: FSMContext):
+    txt = (m.text or "").strip()
+    print("IN_MSG:", m.from_user.id, repr(txt))
+
+    if not only_admin(m.from_user.id):
         return
 
+    t = "".join(ch for ch in txt if ch.isdigit())
+    if len(t) != 6:
+        await m.answer("не то. нужно 6 цифр: ддммгг (пример 050126).")
+        return
+
+    await state.update_data(date=t)
+    await m.answer(f"ок дата: {t}")
+
+
+@dp.callback_query(F.data == "cancel")
+async def cancel(c: CallbackQuery, state: FSMContext):
+    print("IN_CB:", c.from_user.id, c.data)
+
+    if not only_admin(c.from_user.id):
+        await c.answer()
+        return
+
+    await state.clear()
+    await c.message.answer("отменено.", reply_markup=kb_main())
     await c.answer()
 
 
