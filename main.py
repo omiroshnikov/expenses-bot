@@ -1,6 +1,6 @@
 import os
 import json
-from aiohttp import web
+from aiohttp import web, ClientSession
 
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import (
@@ -20,8 +20,11 @@ WEBHOOK_PATH = "/tg"
 WEBHOOK_URL = f"{BASE_URL}{WEBHOOK_PATH}" if BASE_URL else None
 WEBAPP_URL = f"{BASE_URL}/app" if BASE_URL else None
 
+GAS_EXEC_URL = os.environ.get("GAS_EXEC_URL", "").strip()
+
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
+http = ClientSession()
 
 
 def only_admin(user_id: int) -> bool:
@@ -29,10 +32,18 @@ def only_admin(user_id: int) -> bool:
 
 
 def kb_main():
-    # одна кнопка, без "отмена" - чтоб не путать старые сообщения
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="заполнить", web_app=WebAppInfo(url=WEBAPP_URL))],
     ])
+
+
+def ymd_to_ddmmyy(ymd: str) -> str:
+    # "2026-02-27" -> "270226"
+    try:
+        yyyy, mm, dd = ymd.split("-")
+        return f"{dd}{mm}{yyyy[-2:]}"
+    except Exception:
+        return ""
 
 
 @dp.message(F.text == "/start")
@@ -57,15 +68,56 @@ async def on_webapp_data(m: Message):
         await m.answer("ошибка: не смог прочитать данные формы")
         return
 
-    await m.answer(
-        "принято:\n"
-        f"дата: {payload.get('date')}\n"
-        f"наименование: {payload.get('name')}\n"
-        f"сумма: {payload.get('amount')}\n"
-        f"категория: {payload.get('category')}\n"
-        f"откуда: {payload.get('payFrom')}\n"
-        f"примечание: {payload.get('note')}"
-    )
+    if not GAS_EXEC_URL:
+        await m.answer("ошибка: не задан GAS_EXEC_URL в render env")
+        return
+
+    ddmmyy = ymd_to_ddmmyy(payload.get("date") or "")
+    name = (payload.get("name") or "").strip()
+    amount = (payload.get("amount") or "").strip()
+    category = (payload.get("category") or "").strip()
+    pay_from = (payload.get("payFrom") or "").strip()
+    note = (payload.get("note") or "").strip()
+
+    if not name:
+        await m.answer("ошибка: пустое наименование")
+        return
+
+    # строка в формате твоего старого бота
+    line = ";".join([ddmmyy, name, amount, category, pay_from, note]).rstrip(";")
+
+    # фейкаем телеграм update для твоего apps script doPost(e)
+    update = {
+        "message": {
+            "message_id": m.message_id,  # для дедупа в GAS
+            "text": line,
+            "chat": {"id": m.chat.id},
+            "from": {
+                "id": m.from_user.id,
+                "username": m.from_user.username,
+                "first_name": m.from_user.first_name,
+                "last_name": m.from_user.last_name,
+            },
+        }
+    }
+
+    try:
+        async with http.post(
+            GAS_EXEC_URL,
+            data=json.dumps(update),
+            headers={"Content-Type": "application/json"},
+            timeout=20,
+        ) as resp:
+            body = await resp.text()
+            print("GAS_RESP:", resp.status, body[:200])
+            if resp.status != 200:
+                await m.answer(f"ошибка: gas вернул {resp.status}")
+                return
+    except Exception as e:
+        await m.answer(f"ошибка: не достучался до gas: {e}")
+        return
+
+    await m.answer(f"ок. отправил в таблицу: {line}")
 
 
 async def on_startup(app: web.Application):
@@ -76,15 +128,20 @@ async def on_startup(app: web.Application):
     await bot.set_webhook(
         WEBHOOK_URL,
         drop_pending_updates=True,
-        allowed_updates=["message", "callback_query"],  # web_app_data прилетает как message
+        allowed_updates=["message", "callback_query"],
     )
     print("WEBHOOK_SET:", WEBHOOK_URL)
     print("WEBAPP_URL:", WEBAPP_URL)
 
 
+async def on_cleanup(app: web.Application):
+    await http.close()
+
+
 def main():
     app = web.Application()
     app.on_startup.append(on_startup)
+    app.on_cleanup.append(on_cleanup)
 
     async def app_page(_req: web.Request):
         return web.FileResponse("webapp.html")
