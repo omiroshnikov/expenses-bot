@@ -60,9 +60,6 @@ async def on_error(event, exception):
 @dp.message(F.text == "/start")
 async def start(m: Message):
     await m.answer(f"твой id = {m.from_user.id}")
-        return
-    await state.clear()
-    await m.answer("ок. жми «заполнить»", reply_markup=kb_main())
 
 
 @dp.callback_query(F.data == "fill")
