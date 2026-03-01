@@ -18,7 +18,7 @@ ADMIN_ID = int(os.environ["ADMIN_ID"])
 BASE_URL = os.environ.get("RENDER_EXTERNAL_URL", "").rstrip("/")
 WEBHOOK_PATH = "/tg"
 WEBHOOK_URL = f"{BASE_URL}{WEBHOOK_PATH}" if BASE_URL else None
-WEBAPP_URL = f"{BASE_URL}/app" if BASE_URL else None
+WEBAPP_URL = f"{BASE_URL}/app?v=4" if BASE_URL else None
 
 GAS_EXEC_URL = os.environ.get("GAS_EXEC_URL", "").strip()
 
