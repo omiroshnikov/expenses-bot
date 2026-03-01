@@ -18,7 +18,7 @@ ADMIN_ID = int(os.environ["ADMIN_ID"])
 BASE_URL = os.environ.get("RENDER_EXTERNAL_URL", "").rstrip("/")
 WEBHOOK_PATH = "/tg"
 WEBHOOK_URL = f"{BASE_URL}{WEBHOOK_PATH}" if BASE_URL else None
-WEBAPP_URL = f"{BASE_URL}/app?v=9999" if BASE_URL else None
+WEBAPP_URL = f"{BASE_URL}/testapp?v=1" if BASE_URL else None
 
 GAS_EXEC_URL = os.environ.get("GAS_EXEC_URL", "").strip()
 
@@ -139,7 +139,7 @@ def main():
     async def app_page(_req: web.Request):
         return web.FileResponse("webapp.html")
 
-    app.router.add_get("/app", app_page)
+   app.router.add_get("/testapp", app_page)
 
     SimpleRequestHandler(dp, bot).register(app, path=WEBHOOK_PATH)
     setup_application(app, dp, bot=bot)
