@@ -115,5 +115,11 @@
       tg.close();
     };
   </script>
+
+  <script>
+  const tg = window.Telegram?.WebApp;
+  alert("tg=" + (!!tg) + ", sendData=" + (!!tg?.sendData));
+</script>
+
 </body>
 </html>
