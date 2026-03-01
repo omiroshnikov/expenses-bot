@@ -116,9 +116,17 @@
     };
   </script>
 
-  <script>
+ <script>
   const tg = window.Telegram?.WebApp;
-  alert("tg=" + (!!tg) + ", sendData=" + (!!tg?.sendData));
+
+  // 1) железобетонный маркер, что это НОВАЯ версия html
+  const badge = document.createElement("div");
+  badge.style.cssText = "position:fixed;left:10px;bottom:10px;padding:8px 10px;background:#111;color:#fff;border-radius:10px;z-index:99999;font-size:14px";
+  badge.textContent = "dbg v4 | tg=" + (!!tg) + " | sendData=" + (!!tg?.sendData);
+  document.body.appendChild(badge);
+
+  // 2) если tg есть - покажем нативный алерт телеги (не браузерный)
+  try { tg?.showAlert?.("dbg v4: tg=" + (!!tg) + ", sendData=" + (!!tg?.sendData)); } catch(e){}
 </script>
 
 </body>
