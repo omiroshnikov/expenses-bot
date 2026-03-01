@@ -139,7 +139,7 @@ def main():
     async def app_page(_req: web.Request):
         return web.FileResponse("webapp.html")
 
-   app.router.add_get("/testapp", app_page)
+    app.router.add_get("/testapp", app_page)
 
     SimpleRequestHandler(dp, bot).register(app, path=WEBHOOK_PATH)
     setup_application(app, dp, bot=bot)
