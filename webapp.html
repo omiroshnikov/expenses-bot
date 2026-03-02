@@ -4,9 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>расход</title>
-
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-
   <style>
     body { font-family: -apple-system, system-ui, sans-serif; padding: 14px; }
     label { display:block; margin: 10px 0 6px; opacity:.8; }
@@ -14,6 +12,7 @@
     .row { display:flex; gap:10px; margin-top:10px; }
     .row button { width:50%; }
     button { margin-top: 14px; }
+    .hint { margin-top:10px; font-size:13px; opacity:.75; }
   </style>
 </head>
 
@@ -61,18 +60,21 @@
   <label>примечание</label>
   <input id="note" placeholder="" />
 
-  <!-- html-кнопка оставляем, но в web telegram жмём лучше main button -->
   <button type="button" id="send">отправить</button>
+
+  <div class="hint" id="hint"></div>
 
   <script>
     const tg = window.Telegram?.WebApp;
+
+    const params = new URLSearchParams(location.search);
+    const k = params.get("k") || "";
 
     function iso(d){
       const z = n => String(n).padStart(2,'0');
       return `${d.getFullYear()}-${z(d.getMonth()+1)}-${z(d.getDate())}`;
     }
 
-    // init date today
     document.getElementById('date').value = iso(new Date());
 
     document.getElementById('today').onclick = () => {
@@ -84,55 +86,60 @@
       document.getElementById('date').value = iso(d);
     };
 
-    function buildPayload(){
-      return {
+    if (tg){
+      tg.ready();
+      tg.expand();
+    }
+
+    async function doSend(){
+      const payload = {
         date: document.getElementById('date').value,
         name: document.getElementById('name').value.trim(),
         amount: document.getElementById('amount').value.trim(),
         category: document.getElementById('category').value.trim(),
         payFrom: document.getElementById('payFrom').value.trim(),
         note: document.getElementById('note').value.trim(),
+        _mid: Date.now()
       };
-    }
-
-    function doSend(){
-      const payload = buildPayload();
 
       if (!payload.name){
-        if (tg?.showAlert) tg.showAlert("введи наименование");
-        else alert("введи наименование");
+        (tg?.showAlert ? tg.showAlert("введи наименование") : alert("введи наименование"));
         return;
       }
 
-      if (!tg || !tg.sendData){
-        alert("telegram webapp api не найден (открой внутри телеги)");
-        return;
-      }
+      document.getElementById('hint').textContent = "отправляю...";
 
-      tg.sendData(JSON.stringify(payload));
+      try {
+        const r = await fetch(`/submit?k=${encodeURIComponent(k)}`, {
+          method: "POST",
+          headers: {"Content-Type":"application/json"},
+          body: JSON.stringify(payload)
+        });
+        const j = await r.json().catch(() => ({}));
 
-      // не закрываем сразу - даём апдейту долететь
-      if (tg.showAlert){
-        tg.showAlert("отправлено");
-        setTimeout(() => tg.close(), 1200);
-      } else {
-        alert("отправлено");
+        if (!r.ok || !j.ok){
+          document.getElementById('hint').textContent = "ошибка отправки";
+          (tg?.showAlert ? tg.showAlert("ошибка: " + (j.error || r.status)) : alert("ошибка"));
+          return;
+        }
+
+        document.getElementById('hint').textContent = "ок: " + j.line;
+        (tg?.showAlert ? tg.showAlert("записано") : alert("записано"));
+        setTimeout(() => tg?.close?.(), 600);
+      } catch(e){
+        document.getElementById('hint').textContent = "ошибка сети";
+        (tg?.showAlert ? tg.showAlert("ошибка сети") : alert("ошибка сети"));
       }
     }
 
-    // html кнопка
     document.getElementById('send').onclick = doSend;
 
-    // telegram main button (в web tg это надёжнее)
+    // на всякий: main button тоже
     if (tg){
-      tg.ready();
-      tg.expand();
-
       tg.MainButton.setText("отправить");
       tg.MainButton.show();
       tg.MainButton.onClick(doSend);
     }
   </script>
-
 </body>
 </html>
