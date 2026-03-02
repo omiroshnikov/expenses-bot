@@ -5,7 +5,6 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>расход</title>
 
-  <!-- важно: sdk телеги -->
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 
   <style>
@@ -86,7 +85,7 @@
 
     if (tg){
       tg.ready();
-      tg.MainButton.hide(); // чтобы не было второй “отправить”
+      tg.MainButton.hide(); // убираем системную кнопку телеги
       tg.expand();
     }
 
@@ -101,33 +100,27 @@
       };
 
       if (!payload.name){
-        alert("введи наименование");
+        if (tg?.showAlert) tg.showAlert("введи наименование");
+        else alert("введи наименование");
         return;
       }
 
-      if (!tg){
+      if (!tg || !tg.sendData){
         alert("telegram webapp api не найден (открой внутри телеги)");
         return;
       }
 
       tg.sendData(JSON.stringify(payload));
-      alert("отправлено");
-      tg.close();
+
+      // ВАЖНО: не закрываем мгновенно, чтобы sendData точно долетел
+      if (tg.showAlert){
+        tg.showAlert("отправлено");
+        setTimeout(() => tg.close(), 250);
+      } else {
+        alert("отправлено");
+      }
     };
   </script>
-
- <script>
-  const tg = window.Telegram?.WebApp;
-
-  // 1) железобетонный маркер, что это НОВАЯ версия html
-  const badge = document.createElement("div");
-  badge.style.cssText = "position:fixed;left:10px;bottom:10px;padding:8px 10px;background:#111;color:#fff;border-radius:10px;z-index:99999;font-size:14px";
-  badge.textContent = "dbg v4 | tg=" + (!!tg) + " | sendData=" + (!!tg?.sendData);
-  document.body.appendChild(badge);
-
-  // 2) если tg есть - покажем нативный алерт телеги (не браузерный)
-  try { tg?.showAlert?.("dbg v4: tg=" + (!!tg) + ", sendData=" + (!!tg?.sendData)); } catch(e){}
-</script>
 
 </body>
 </html>
