@@ -61,6 +61,7 @@
   <label>примечание</label>
   <input id="note" placeholder="" />
 
+  <!-- html-кнопка оставляем, но в web telegram жмём лучше main button -->
   <button type="button" id="send">отправить</button>
 
   <script>
@@ -83,14 +84,8 @@
       document.getElementById('date').value = iso(d);
     };
 
-    if (tg){
-      tg.ready();
-      tg.MainButton.hide(); // убираем системную кнопку телеги
-      tg.expand();
-    }
-
-    document.getElementById('send').onclick = () => {
-      const payload = {
+    function buildPayload(){
+      return {
         date: document.getElementById('date').value,
         name: document.getElementById('name').value.trim(),
         amount: document.getElementById('amount').value.trim(),
@@ -98,6 +93,10 @@
         payFrom: document.getElementById('payFrom').value.trim(),
         note: document.getElementById('note').value.trim(),
       };
+    }
+
+    function doSend(){
+      const payload = buildPayload();
 
       if (!payload.name){
         if (tg?.showAlert) tg.showAlert("введи наименование");
@@ -112,14 +111,27 @@
 
       tg.sendData(JSON.stringify(payload));
 
-      // ВАЖНО: не закрываем мгновенно, чтобы sendData точно долетел
+      // не закрываем сразу - даём апдейту долететь
       if (tg.showAlert){
         tg.showAlert("отправлено");
-        setTimeout(() => tg.close(), 250);
+        setTimeout(() => tg.close(), 1200);
       } else {
         alert("отправлено");
       }
-    };
+    }
+
+    // html кнопка
+    document.getElementById('send').onclick = doSend;
+
+    // telegram main button (в web tg это надёжнее)
+    if (tg){
+      tg.ready();
+      tg.expand();
+
+      tg.MainButton.setText("отправить");
+      tg.MainButton.show();
+      tg.MainButton.onClick(doSend);
+    }
   </script>
 
 </body>
