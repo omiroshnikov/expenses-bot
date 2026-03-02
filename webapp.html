@@ -8,10 +8,9 @@
   <style>
     body { font-family: -apple-system, system-ui, sans-serif; padding: 14px; }
     label { display:block; margin: 10px 0 6px; opacity:.8; }
-    input, select, button { width:100%; padding:12px; font-size:16px; box-sizing:border-box; }
+    input, select { width:100%; padding:12px; font-size:16px; box-sizing:border-box; }
     .row { display:flex; gap:10px; margin-top:10px; }
-    .row button { width:50%; }
-    button { margin-top: 14px; }
+    .row button { width:50%; padding:12px; font-size:16px; }
     .hint { margin-top:10px; font-size:13px; opacity:.75; }
   </style>
 </head>
@@ -27,15 +26,15 @@
     <button type="button" id="yesterday">вчера</button>
   </div>
 
-  <label>наименование</label>
+  <label>наименование *</label>
   <input id="name" placeholder="кофе" />
 
-  <label>сумма</label>
+  <label>сумма *</label>
   <input id="amount" inputmode="decimal" placeholder="460" />
 
-  <label>категория</label>
+  <label>категория *</label>
   <select id="category">
-    <option value="">-</option>
+    <option value="">выбери</option>
     <option>кафе</option><option>продукты</option><option>спорт</option><option>красота/здоровье</option>
     <option>транспорт</option><option>развлечения</option><option>авто</option><option>подарки</option>
     <option>квартира</option><option>алименты</option><option>кредит</option><option>инвестиции</option>
@@ -60,13 +59,10 @@
   <label>примечание</label>
   <input id="note" placeholder="" />
 
-  <button type="button" id="send">отправить</button>
-
   <div class="hint" id="hint"></div>
 
   <script>
     const tg = window.Telegram?.WebApp;
-
     const params = new URLSearchParams(location.search);
     const k = params.get("k") || "";
 
@@ -89,26 +85,44 @@
     if (tg){
       tg.ready();
       tg.expand();
+      tg.MainButton.setText("отправить");
+      tg.MainButton.show();
+      tg.MainButton.onClick(doSend);
+    }
+
+    function normalizeAmount(s){
+      return String(s || "").trim().replace(/\s/g,'').replace(',','.');
     }
 
     async function doSend(){
+      const name = document.getElementById('name').value.trim();
+      const amount = normalizeAmount(document.getElementById('amount').value);
+      const category = document.getElementById('category').value.trim();
+
+      if (!name){
+        document.getElementById('hint').textContent = "введи наименование";
+        return;
+      }
+      if (!amount){
+        document.getElementById('hint').textContent = "введи сумму";
+        return;
+      }
+      if (!category){
+        document.getElementById('hint').textContent = "выбери категорию";
+        return;
+      }
+
       const payload = {
         date: document.getElementById('date').value,
-        name: document.getElementById('name').value.trim(),
-        amount: document.getElementById('amount').value.trim(),
-        category: document.getElementById('category').value.trim(),
+        name,
+        amount,
+        category,
         payFrom: document.getElementById('payFrom').value.trim(),
         note: document.getElementById('note').value.trim(),
         _mid: Date.now()
       };
 
-      if (!payload.name){
-        (tg?.showAlert ? tg.showAlert("введи наименование") : alert("введи наименование"));
-        return;
-      }
-
       document.getElementById('hint').textContent = "отправляю...";
-
       try {
         const r = await fetch(`/submit?k=${encodeURIComponent(k)}`, {
           method: "POST",
@@ -119,26 +133,14 @@
 
         if (!r.ok || !j.ok){
           document.getElementById('hint').textContent = "ошибка отправки";
-          (tg?.showAlert ? tg.showAlert("ошибка: " + (j.error || r.status)) : alert("ошибка"));
           return;
         }
 
-        document.getElementById('hint').textContent = "ок: " + j.line;
-        (tg?.showAlert ? tg.showAlert("записано") : alert("записано"));
-        setTimeout(() => tg?.close?.(), 600);
+        // без "записано", просто закрываем
+        setTimeout(() => tg?.close?.(), 200);
       } catch(e){
         document.getElementById('hint').textContent = "ошибка сети";
-        (tg?.showAlert ? tg.showAlert("ошибка сети") : alert("ошибка сети"));
       }
-    }
-
-    document.getElementById('send').onclick = doSend;
-
-    // на всякий: main button тоже
-    if (tg){
-      tg.MainButton.setText("отправить");
-      tg.MainButton.show();
-      tg.MainButton.onClick(doSend);
     }
   </script>
 </body>
