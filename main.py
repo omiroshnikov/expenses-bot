@@ -1,5 +1,6 @@
 import os
 import json
+import logging
 from aiohttp import web, ClientSession
 
 from aiogram import Bot, Dispatcher, F
@@ -12,14 +13,19 @@ from aiogram.types import (
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
+logging.basicConfig(level=logging.INFO)
+
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 ADMIN_ID = int(os.environ["ADMIN_ID"])
 
 BASE_URL = os.environ.get("RENDER_EXTERNAL_URL", "").rstrip("/")
 WEBHOOK_PATH = "/tg"
 WEBHOOK_URL = f"{BASE_URL}{WEBHOOK_PATH}" if BASE_URL else None
+
+# webapp (html) endpoint in this service
 WEBAPP_URL = f"{BASE_URL}/testapp?v=1" if BASE_URL else None
 
+# google apps script webapp exec url
 GAS_EXEC_URL = os.environ.get("GAS_EXEC_URL", "").strip()
 
 bot = Bot(BOT_TOKEN)
@@ -49,7 +55,7 @@ def ymd_to_ddmmyy(ymd: str) -> str:
 async def start(m: Message):
     if not only_admin(m.from_user.id):
         return
-    print("IN_MSG:", m.from_user.id, repr(m.text))
+    logging.info("IN_MSG: %s %s", m.from_user.id, repr(m.text))
     await m.answer("ок. жми «заполнить»", reply_markup=kb_main())
 
 
@@ -58,8 +64,8 @@ async def on_webapp_data(m: Message):
     if not only_admin(m.from_user.id):
         return
 
-    raw = m.web_app_data.data or ""
-    print("WEBAPP_DATA:", raw)
+    raw = (m.web_app_data.data or "").strip()
+    logging.info("WEBAPP_DATA raw: %s", raw[:500])
 
     try:
         payload = json.loads(raw or "{}")
@@ -84,6 +90,7 @@ async def on_webapp_data(m: Message):
 
     line = ";".join([ddmmyy, name, amount, category, pay_from, note]).rstrip(";")
 
+    # имитируем telegram update, который ожидает твой apps script doPost
     update = {
         "message": {
             "message_id": m.message_id,
@@ -102,12 +109,11 @@ async def on_webapp_data(m: Message):
         async with ClientSession() as http:
             async with http.post(
                 GAS_EXEC_URL,
-                data=json.dumps(update),
-                headers={"Content-Type": "application/json"},
+                json=update,  # ВАЖНО: не data=..., а json=...
                 timeout=20,
             ) as resp:
                 body = await resp.text()
-                print("GAS_RESP:", resp.status, body[:200])
+                logging.info("GAS_RESP: %s %s", resp.status, body[:200])
                 if resp.status != 200:
                     await m.answer(f"ошибка: gas вернул {resp.status}")
                     return
@@ -120,16 +126,17 @@ async def on_webapp_data(m: Message):
 
 async def on_startup(app: web.Application):
     if not WEBHOOK_URL:
-        print("NO WEBHOOK_URL (set RENDER_EXTERNAL_URL)")
+        logging.info("NO WEBHOOK_URL (set RENDER_EXTERNAL_URL)")
         return
 
     await bot.set_webhook(
         WEBHOOK_URL,
         drop_pending_updates=True,
-        allowed_updates=["message", "callback_query", "web_app_data"],
+        allowed_updates=["message", "callback_query"],
     )
-    print("WEBHOOK_SET:", WEBHOOK_URL)
-    print("WEBAPP_URL:", WEBAPP_URL)
+    logging.info("WEBHOOK_SET: %s", WEBHOOK_URL)
+    logging.info("WEBAPP_URL: %s", WEBAPP_URL)
+    logging.info("GAS_EXEC_URL set: %s", bool(GAS_EXEC_URL))
 
 
 def main():
