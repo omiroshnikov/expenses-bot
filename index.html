@@ -1,0 +1,172 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>расход</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    html { -webkit-text-size-adjust: 100%; }
+    body { font-family: -apple-system, system-ui, sans-serif; width: 100%; padding: 12px 14px; margin: 0; background: #fff; color: #111; box-sizing: border-box; }
+    .container { width: 100%; margin: 0; }
+    h2 { margin: 2px 0 8px; font-size: 19px; line-height: 1.25; font-weight: 700; }
+    label { display: block; margin: 8px 0 4px; opacity: .95; font-size: 16px; }
+    input, select { width: 100%; min-height: 46px; padding: 10px 12px; font-size: 16px; box-sizing: border-box; border: 1px solid #d9d9d9; border-radius: 10px; background: #fff; }
+    .row { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 8px; }
+    .row button { width: 70%; min-height: 42px; padding: 10px; font-size: 16px; border-radius: 10px; border: 1px solid #d9d9d9; background: #f6f7f9; touch-action: manipulation; }
+    #date { min-height: 46px; padding: 10px 12px; font-size: 16px; }
+    #submitBtn { width: 100%; margin-top: 10px; min-height: 0; padding: 11px 12px; font-size: 16px; border: 0; border-radius: 12px; background: #2aabee; color: #fff; font-weight: 600; touch-action: manipulation; display: block; }
+    #submitBtn[disabled] { opacity: .7; cursor: not-allowed; }
+    .hint { margin-top: 8px; font-size: 14px; min-height: 18px; opacity: .9; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>расход</h2>
+
+    <label>дата</label>
+    <input id="date" type="date">
+
+    <div class="row">
+      <button type="button" id="today">сегодня</button>
+      <button type="button" id="yesterday">вчера</button>
+    </div>
+
+    <label>наименование *</label>
+    <input id="name" placeholder="кофе">
+
+    <label>сумма *</label>
+    <input id="amount" inputmode="decimal" placeholder="460">
+
+    <label>категория *</label>
+    <select id="category" required>
+      <option value="">выбери</option>
+      <option>кафе</option><option>продукты</option><option>спорт</option><option>красота/здоровье</option>
+      <option>транспорт</option><option>развлечения</option><option>авто</option><option>подарки</option>
+      <option>квартира</option><option>алименты</option><option>кредит</option><option>инвестиции</option>
+      <option>прочее</option><option>тел. + инет + подписки</option><option>банк. комиссия</option><option>дети</option>
+      <option>плутон</option><option>одежда</option><option>путешествия</option><option>отдал жене</option>
+      <option>книги</option><option>ozon</option><option>обучение</option>
+    </select>
+
+    <label>откуда платил</label>
+    <select id="payFrom">
+      <option>сбер 7650</option>
+      <option>сбер gold</option>
+      <option>тинькофф</option>
+      <option>ип рахматуллаев</option>
+      <option>ип саяпина</option>
+      <option>сбер ип урумчи</option>
+      <option>счет сбер физ. лица</option>
+      <option>сбер разные счета</option>
+      <option>наличные</option>
+    </select>
+
+    <label>примечание</label>
+    <input id="note" placeholder="">
+
+    <button id="submitBtn" type="button">отправить</button>
+    <div id="hint" class="hint"></div>
+  </div>
+
+  <script>
+    const tg = window.Telegram?.WebApp;
+    const params = new URLSearchParams(location.search);
+    const gasUrl = params.get("gas_url") || "";
+    const accessKey = params.get("k") || "";
+    let isSubmitting = false;
+
+    function iso(d) {
+      const z = (n) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`;
+    }
+
+    function normalizeAmount(s) {
+      return String(s || "").trim().replace(/\s/g, "").replace(",", ".");
+    }
+
+    function setHint(text) {
+      document.getElementById("hint").textContent = text;
+    }
+
+    function setSubmittingState(locked) {
+      isSubmitting = locked;
+      const btn = document.getElementById("submitBtn");
+      btn.disabled = locked;
+      btn.textContent = locked ? "отправляю..." : "отправить";
+    }
+
+    function readTelegramMeta() {
+      const initDataUser = tg?.initDataUnsafe?.user || {};
+      const initDataChat = tg?.initDataUnsafe?.chat || {};
+      return {
+        tg_user: String(initDataUser.username || `${initDataUser.first_name || ""} ${initDataUser.last_name || ""}`.trim()),
+        tg_user_id: String(initDataUser.id || ""),
+        chat_id: String(initDataChat.id || initDataUser.id || ""),
+        message_id: ""
+      };
+    }
+
+    async function submit() {
+      if (isSubmitting) return;
+      if (!gasUrl || !accessKey) {
+        setHint("ошибка конфигурации формы");
+        return;
+      }
+
+      const name = document.getElementById("name").value.trim();
+      const amount = normalizeAmount(document.getElementById("amount").value);
+      const category = document.getElementById("category").value.trim();
+
+      if (!name) return setHint("введи наименование");
+      if (!amount) return setHint("введи сумму");
+      if (!category) return setHint("выбери категорию");
+
+      const submitId = (window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`).toString();
+      const payload = {
+        k: accessKey,
+        submit_id: submitId,
+        date: document.getElementById("date").value || iso(new Date()),
+        name,
+        amount,
+        category,
+        payFrom: document.getElementById("payFrom").value.trim(),
+        note: document.getElementById("note").value.trim(),
+        ...readTelegramMeta()
+      };
+
+      setSubmittingState(true);
+      setHint("отправляю...");
+
+      try {
+        const body = new URLSearchParams({ payload: JSON.stringify(payload) });
+        await fetch(gasUrl, {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+          body,
+          mode: "no-cors"
+        });
+        setTimeout(() => tg?.close?.(), 250);
+      } catch (_e) {
+        setSubmittingState(false);
+        setHint("ошибка сети, попробуй ещё раз");
+      }
+    }
+
+    document.getElementById("date").value = iso(new Date());
+    document.getElementById("today").onclick = () => { document.getElementById("date").value = iso(new Date()); };
+    document.getElementById("yesterday").onclick = () => {
+      const d = new Date();
+      d.setDate(d.getDate() - 1);
+      document.getElementById("date").value = iso(d);
+    };
+    document.getElementById("submitBtn").onclick = submit;
+
+    if (tg) {
+      tg.ready();
+      tg.expand();
+      tg.MainButton.hide();
+    }
+  </script>
+</body>
+</html>
