@@ -1,6 +1,8 @@
 import os
 import json
 import logging
+import time
+import asyncio
 from aiohttp import web, ClientSession
 
 from aiogram import Bot, Dispatcher, F
@@ -24,11 +26,15 @@ WEBHOOK_URL = f"{BASE_URL}{WEBHOOK_PATH}" if BASE_URL else None
 
 GAS_EXEC_URL = os.environ.get("GAS_EXEC_URL", "").strip()
 WEBAPP_KEY = os.environ.get("WEBAPP_KEY", "").strip()
+GAS_FORM_URL = os.environ.get("GAS_FORM_URL", "").strip()
 
-WEBAPP_URL = f"{BASE_URL}/testapp?v=2&k={WEBAPP_KEY}" if BASE_URL else None
+# Предпочитаем отдавать Mini App напрямую из GAS, чтобы форма не зависела от sleep Render.
+WEBAPP_URL = GAS_FORM_URL or (f"{BASE_URL}/testapp?v=2&k={WEBAPP_KEY}" if BASE_URL else None)
 
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
+submit_dedup_cache: dict[str, float] = {}
+submit_dedup_lock = asyncio.Lock()
 
 
 def only_admin(user_id: int) -> bool:
@@ -123,14 +129,30 @@ async def on_startup(app: web.Application):
     if WEBHOOK_URL:
         await bot.set_webhook(
             WEBHOOK_URL,
-            drop_pending_updates=True,
+            # На cold start не теряем апдейты, пришедшие в период "пробуждения".
+            drop_pending_updates=False,
             allowed_updates=["message", "callback_query"],
         )
         logging.info("WEBHOOK_SET: %s", WEBHOOK_URL)
 
     logging.info("WEBAPP_URL: %s", WEBAPP_URL)
     logging.info("GAS_EXEC_URL set: %s", bool(GAS_EXEC_URL))
+    logging.info("GAS_FORM_URL set: %s", bool(GAS_FORM_URL))
     logging.info("WEBAPP_KEY set: %s", bool(WEBAPP_KEY))
+
+async def is_duplicate_submit(submit_id: str) -> bool:
+    now = time.time()
+    ttl_seconds = 60 * 60 * 24
+    async with submit_dedup_lock:
+        # Периодическая зачистка старых ключей.
+        stale = [k for k, ts in submit_dedup_cache.items() if now - ts > ttl_seconds]
+        for k in stale:
+            submit_dedup_cache.pop(k, None)
+
+        if submit_id in submit_dedup_cache:
+            return True
+        submit_dedup_cache[submit_id] = now
+        return False
 
 
 def main():
@@ -157,9 +179,17 @@ def main():
         category = str(payload.get("category", "")).strip()
         pay_from = str(payload.get("payFrom", "")).strip()
         note = str(payload.get("note", "")).strip()
+        submit_id = str(payload.get("submit_id", "")).strip()
 
         if not name:
             return web.json_response({"ok": False, "error": "empty name"}, status=400)
+        if not amount:
+            return web.json_response({"ok": False, "error": "empty amount"}, status=400)
+        if not category:
+            return web.json_response({"ok": False, "error": "empty category"}, status=400)
+
+        if submit_id and await is_duplicate_submit(submit_id):
+            return web.json_response({"ok": True, "duplicate": True, "submit_id": submit_id})
 
         line = ";".join([ddmmyy, name, amount, category, pay_from, note]).rstrip(";")
         logging.info("SUBMIT line: %s", line)
