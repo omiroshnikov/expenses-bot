@@ -27,6 +27,7 @@ WEBHOOK_URL = f"{BASE_URL}{WEBHOOK_PATH}" if BASE_URL else None
 GAS_EXEC_URL = os.environ.get("GAS_EXEC_URL", "").strip()
 WEBAPP_KEY = os.environ.get("WEBAPP_KEY", "").strip()
 GAS_FORM_URL = os.environ.get("GAS_FORM_URL", "").strip()
+SKIP_WEBHOOK_SET = os.environ.get("SKIP_WEBHOOK_SET", "").strip().lower() in {"1", "true", "yes"}
 
 # Предпочитаем отдавать Mini App напрямую из GAS, чтобы форма не зависела от sleep Render.
 WEBAPP_URL = GAS_FORM_URL or (f"{BASE_URL}/testapp?v=2&k={WEBAPP_KEY}" if BASE_URL else None)
@@ -135,7 +136,7 @@ async def on_webapp_data(m: Message):
 
 
 async def on_startup(app: web.Application):
-    if WEBHOOK_URL:
+    if WEBHOOK_URL and not SKIP_WEBHOOK_SET:
         await bot.set_webhook(
             WEBHOOK_URL,
             # На cold start не теряем апдейты, пришедшие в период "пробуждения".
@@ -143,6 +144,8 @@ async def on_startup(app: web.Application):
             allowed_updates=["message", "callback_query"],
         )
         logging.info("WEBHOOK_SET: %s", WEBHOOK_URL)
+    elif SKIP_WEBHOOK_SET:
+        logging.info("WEBHOOK_SET skipped by SKIP_WEBHOOK_SET")
 
     logging.info("WEBAPP_URL: %s", WEBAPP_URL)
     logging.info("GAS_EXEC_URL set: %s", bool(GAS_EXEC_URL))
