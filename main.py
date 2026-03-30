@@ -35,6 +35,7 @@ bot = Bot(BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 submit_dedup_cache: dict[str, float] = {}
 submit_dedup_lock = asyncio.Lock()
+start_reply_cache: dict[int, float] = {}
 
 
 def only_admin(user_id: int) -> bool:
@@ -83,6 +84,14 @@ async def forward_to_gas(line: str, chat_id: int, message_id: int, from_user):
 async def start(m: Message):
     if not only_admin(m.from_user.id):
         return
+    now = time.time()
+    last = start_reply_cache.get(m.from_user.id, 0.0)
+    # На cold start пользователь часто жмет /start несколько раз.
+    # Возвращаем только один ответ в коротком окне, чтобы не спамить одинаковыми сообщениями.
+    if now - last < 15:
+        logging.info("START throttled for user=%s", m.from_user.id)
+        return
+    start_reply_cache[m.from_user.id] = now
     logging.info("IN_MSG: %s %s", m.from_user.id, repr(m.text))
     await m.answer("ок. жми «заполнить»", reply_markup=kb_main())
 
