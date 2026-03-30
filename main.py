@@ -27,10 +27,11 @@ WEBHOOK_URL = f"{BASE_URL}{WEBHOOK_PATH}" if BASE_URL else None
 GAS_EXEC_URL = os.environ.get("GAS_EXEC_URL", "").strip()
 WEBAPP_KEY = os.environ.get("WEBAPP_KEY", "").strip()
 GAS_FORM_URL = os.environ.get("GAS_FORM_URL", "").strip()
+STATIC_FORM_URL = os.environ.get("STATIC_FORM_URL", "").strip()
 SKIP_WEBHOOK_SET = os.environ.get("SKIP_WEBHOOK_SET", "").strip().lower() in {"1", "true", "yes"}
 
-# Предпочитаем отдавать Mini App напрямую из GAS, чтобы форма не зависела от sleep Render.
-WEBAPP_URL = GAS_FORM_URL or (f"{BASE_URL}/testapp?v=2&k={WEBAPP_KEY}" if BASE_URL else None)
+# Предпочитаем статическую форму (GitHub Pages), затем GAS, затем fallback на Render.
+WEBAPP_URL = STATIC_FORM_URL or GAS_FORM_URL or (f"{BASE_URL}/testapp?v=2&k={WEBAPP_KEY}" if BASE_URL else None)
 
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
@@ -149,6 +150,7 @@ async def on_startup(app: web.Application):
 
     logging.info("WEBAPP_URL: %s", WEBAPP_URL)
     logging.info("GAS_EXEC_URL set: %s", bool(GAS_EXEC_URL))
+    logging.info("STATIC_FORM_URL set: %s", bool(STATIC_FORM_URL))
     logging.info("GAS_FORM_URL set: %s", bool(GAS_FORM_URL))
     logging.info("WEBAPP_KEY set: %s", bool(WEBAPP_KEY))
 
