@@ -173,6 +173,9 @@ def main():
     app = web.Application()
     app.on_startup.append(on_startup)
 
+    async def health(_req: web.Request):
+        return web.Response(text="ok")
+
     async def app_page(_req: web.Request):
         return web.FileResponse("webapp.html")
 
@@ -217,6 +220,7 @@ def main():
 
         return web.json_response({"ok": True, "line": line})
 
+    app.router.add_get("/health", health)
     app.router.add_get("/testapp", app_page)
     app.router.add_post("/submit", submit)
 
