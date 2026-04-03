@@ -14,6 +14,9 @@
     input, select { width: 100%; min-height: 46px; padding: 10px 12px; font-size: 16px; box-sizing: border-box; border: 1px solid #d9d9d9; border-radius: 10px; background: #fff; }
     .row { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 8px; }
     .row button { width: 70%; min-height: 42px; padding: 10px; font-size: 16px; border-radius: 10px; border: 1px solid #d9d9d9; background: #f6f7f9; touch-action: manipulation; }
+    .pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+    .pill { border: 1px solid #d9d9d9; border-radius: 999px; padding: 7px 10px; background: #f6f7f9; font-size: 14px; cursor: pointer; }
+    .pill.active { background: #2aabee; border-color: #2aabee; color: #fff; }
     #date { min-height: 46px; padding: 10px 12px; font-size: 16px; }
     #submitBtn { width: 100%; margin-top: 10px; min-height: 0; padding: 11px 12px; font-size: 16px; border: 0; border-radius: 12px; background: #2aabee; color: #fff; font-weight: 600; touch-action: manipulation; display: block; }
     #submitBtn[disabled] { opacity: .7; cursor: not-allowed; }
@@ -39,27 +42,15 @@
     <input id="amount" inputmode="decimal" placeholder="460">
 
     <label>категория *</label>
+    <div id="categoryPills" class="pills"></div>
     <select id="category" required>
       <option value="">выбери</option>
-      <option>кафе</option><option>продукты</option><option>спорт</option><option>красота/здоровье</option>
-      <option>транспорт</option><option>развлечения</option><option>авто</option><option>подарки</option>
-      <option>квартира</option><option>алименты</option><option>кредит</option><option>инвестиции</option>
-      <option>прочее</option><option>тел. + инет + подписки</option><option>банк. комиссия</option><option>дети</option>
-      <option>плутон</option><option>одежда</option><option>путешествия</option><option>отдал жене</option>
-      <option>книги</option><option>ozon</option><option>обучение</option>
     </select>
 
     <label>откуда платил</label>
+    <div id="payFromPills" class="pills"></div>
     <select id="payFrom">
-      <option>сбер 7650</option>
-      <option>сбер gold</option>
-      <option>тинькофф</option>
-      <option>ип рахматуллаев</option>
-      <option>ип саяпина</option>
-      <option>сбер ип урумчи</option>
-      <option>счет сбер физ. лица</option>
-      <option>сбер разные счета</option>
-      <option>наличные</option>
+      <option value="">выбери</option>
     </select>
 
     <label>примечание</label>
@@ -75,6 +66,8 @@
     const gasUrl = params.get("gas_url") || "";
     const accessKey = params.get("k") || "";
     let isSubmitting = false;
+    let selectedCategory = "";
+    let selectedPayFrom = "";
 
     function iso(d) {
       const z = (n) => String(n).padStart(2, "0");
@@ -94,6 +87,115 @@
       const btn = document.getElementById("submitBtn");
       btn.disabled = locked;
       btn.textContent = locked ? "отправляю..." : "отправить";
+    }
+
+    function fillSelect(id, values, placeholder) {
+      const sel = document.getElementById(id);
+      sel.innerHTML = "";
+      const base = document.createElement("option");
+      base.value = "";
+      base.textContent = placeholder || "выбери";
+      sel.appendChild(base);
+      values.forEach((v) => {
+        const opt = document.createElement("option");
+        opt.value = v;
+        opt.textContent = v;
+        sel.appendChild(opt);
+      });
+    }
+
+    function renderPills(containerId, values, activeValue, onPick) {
+      const el = document.getElementById(containerId);
+      el.innerHTML = "";
+      values.forEach((v) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = `pill${activeValue === v ? " active" : ""}`;
+        btn.textContent = v;
+        btn.onclick = () => onPick(v);
+        el.appendChild(btn);
+      });
+    }
+
+    function getSelectedCategory() {
+      return selectedCategory || document.getElementById("category").value.trim();
+    }
+
+    function getSelectedPayFrom() {
+      return selectedPayFrom || document.getElementById("payFrom").value.trim();
+    }
+
+    function getUserId() {
+      const initDataUser = tg?.initDataUnsafe?.user || {};
+      return String(initDataUser.id || "");
+    }
+
+    function loadConfigJsonp() {
+      return new Promise((resolve, reject) => {
+        const cb = `cfg_cb_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+        const uid = encodeURIComponent(getUserId());
+        const src = `${gasUrl}?mode=config&k=${encodeURIComponent(accessKey)}&uid=${uid}&callback=${cb}`;
+        const s = document.createElement("script");
+        s.src = src;
+        s.async = true;
+        s.onerror = () => reject(new Error("config load failed"));
+        window[cb] = (data) => {
+          try { resolve(data || {}); } finally {
+            delete window[cb];
+            s.remove();
+          }
+        };
+        document.head.appendChild(s);
+      });
+    }
+
+    async function initDynamicOptions() {
+      if (!gasUrl || !accessKey) return;
+      try {
+        const cfg = await loadConfigJsonp();
+        const categories = Array.isArray(cfg.categories) ? cfg.categories : [];
+        const payFrom = Array.isArray(cfg.payFrom) ? cfg.payFrom : [];
+        const defaultPayFrom = String(cfg.defaultPayFrom || "");
+
+        const catPills = categories.slice(0, 6);
+        const catRest = categories.slice(6);
+        const redrawCategoryPills = () => {
+          renderPills("categoryPills", catPills, selectedCategory, (v) => {
+            selectedCategory = v;
+            document.getElementById("category").value = "";
+            redrawCategoryPills();
+          });
+        };
+        fillSelect("category", catRest, catRest.length ? "другие категории" : "выбери");
+        redrawCategoryPills();
+        document.getElementById("category").onchange = (e) => {
+          selectedCategory = "";
+          redrawCategoryPills();
+        };
+
+        const payPills = payFrom.slice(0, 4);
+        const payRest = payFrom.slice(4);
+        const redrawPayPills = () => {
+          renderPills("payFromPills", payPills, selectedPayFrom, (v) => {
+            selectedPayFrom = v;
+            document.getElementById("payFrom").value = "";
+            redrawPayPills();
+          });
+        };
+        fillSelect("payFrom", payRest, payRest.length ? "другие источники" : "выбери");
+        selectedPayFrom = defaultPayFrom || "";
+        redrawPayPills();
+        if (selectedPayFrom && !payPills.includes(selectedPayFrom)) {
+          document.getElementById("payFrom").value = selectedPayFrom;
+          selectedPayFrom = "";
+        }
+        document.getElementById("payFrom").onchange = () => {
+          selectedPayFrom = "";
+          redrawPayPills();
+        };
+      } catch (_e) {
+        setHint("не удалось загрузить техлист");
+      }
     }
 
     function readTelegramMeta() {
@@ -116,7 +218,7 @@
 
       const name = document.getElementById("name").value.trim();
       const amount = normalizeAmount(document.getElementById("amount").value);
-      const category = document.getElementById("category").value.trim();
+      const category = getSelectedCategory();
 
       if (!name) return setHint("введи наименование");
       if (!amount) return setHint("введи сумму");
@@ -130,7 +232,7 @@
         name,
         amount,
         category,
-        payFrom: document.getElementById("payFrom").value.trim(),
+        payFrom: getSelectedPayFrom(),
         note: document.getElementById("note").value.trim(),
         ...readTelegramMeta()
       };
@@ -161,6 +263,7 @@
       document.getElementById("date").value = iso(d);
     };
     document.getElementById("submitBtn").onclick = submit;
+    initDynamicOptions();
 
     if (tg) {
       tg.ready();
