@@ -19,6 +19,14 @@ logging.basicConfig(level=logging.INFO)
 
 BOT_TOKEN = os.environ["BOT_TOKEN"]
 ADMIN_ID = int(os.environ["ADMIN_ID"])
+ALLOWED_USER_IDS_RAW = os.environ.get("ALLOWED_USER_IDS", "").strip()
+ALLOWED_USER_IDS = {
+    int(x.strip())
+    for x in ALLOWED_USER_IDS_RAW.split(",")
+    if x.strip().isdigit()
+}
+if not ALLOWED_USER_IDS:
+    ALLOWED_USER_IDS = {ADMIN_ID}
 
 BASE_URL = os.environ.get("RENDER_EXTERNAL_URL", "").rstrip("/")
 WEBHOOK_PATH = "/tg"
@@ -41,7 +49,7 @@ start_reply_cache: dict[int, float] = {}
 
 
 def only_admin(user_id: int) -> bool:
-    return user_id == ADMIN_ID
+    return user_id in ALLOWED_USER_IDS
 
 
 def kb_main():
