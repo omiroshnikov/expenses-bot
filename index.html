@@ -12,8 +12,9 @@
     h2 { margin: 2px 0 8px; font-size: 19px; line-height: 1.25; font-weight: 700; }
     label { display: block; margin: 8px 0 4px; opacity: .95; font-size: 16px; }
     input, select { width: 100%; min-height: 46px; padding: 10px 12px; font-size: 16px; box-sizing: border-box; border: 1px solid #d9d9d9; border-radius: 10px; background: #fff; }
-    .row { display: flex; flex-direction: column; align-items: center; gap: 8px; margin-top: 8px; }
-    .row button { width: 70%; min-height: 42px; padding: 10px; font-size: 16px; border-radius: 10px; border: 1px solid #d9d9d9; background: #f6f7f9; touch-action: manipulation; }
+    .dateRow { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+    .dateRow #date { flex: 1; }
+    .quickDateBtn { min-height: 40px; padding: 10px; font-size: 14px; border-radius: 10px; border: 1px solid #d9d9d9; background: #f6f7f9; touch-action: manipulation; white-space: nowrap; }
     .pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
     .pill { border: 1px solid #d9d9d9; border-radius: 999px; padding: 7px 10px; background: #f6f7f9; font-size: 14px; cursor: pointer; }
     .pill.active { background: #2aabee; border-color: #2aabee; color: #fff; }
@@ -28,11 +29,10 @@
     <h2>расход</h2>
 
     <label>дата</label>
-    <input id="date" type="date">
-
-    <div class="row">
-      <button type="button" id="today">сегодня</button>
-      <button type="button" id="yesterday">вчера</button>
+    <div class="dateRow">
+      <input id="date" type="date">
+      <button class="quickDateBtn" type="button" id="today">сегодня</button>
+      <button class="quickDateBtn" type="button" id="yesterday">вчера</button>
     </div>
 
     <label>наименование *</label>
@@ -125,6 +125,13 @@
       return selectedPayFrom || document.getElementById("payFrom").value.trim();
     }
 
+    function applyCategoryAutofill(categoryValue) {
+      const nameEl = document.getElementById("name");
+      if (!nameEl.value.trim() && categoryValue) {
+        nameEl.value = categoryValue;
+      }
+    }
+
     function getUserId() {
       const initDataUser = tg?.initDataUnsafe?.user || {};
       return String(initDataUser.id || "");
@@ -163,6 +170,7 @@
           renderPills("categoryPills", catPills, selectedCategory, (v) => {
             selectedCategory = v;
             document.getElementById("category").value = "";
+            applyCategoryAutofill(v);
             redrawCategoryPills();
           });
         };
@@ -170,6 +178,7 @@
         redrawCategoryPills();
         document.getElementById("category").onchange = (e) => {
           selectedCategory = "";
+          applyCategoryAutofill(String(e.target.value || "").trim());
           redrawCategoryPills();
         };
 
@@ -219,10 +228,12 @@
       const name = document.getElementById("name").value.trim();
       const amount = normalizeAmount(document.getElementById("amount").value);
       const category = getSelectedCategory();
+      const payFrom = getSelectedPayFrom();
 
       if (!name) return setHint("введи наименование");
       if (!amount) return setHint("введи сумму");
       if (!category) return setHint("выбери категорию");
+      if (!payFrom) return setHint("выбери откуда платил");
 
       const submitId = (window.crypto?.randomUUID?.() || `${Date.now()}-${Math.random()}`).toString();
       const payload = {
@@ -232,7 +243,7 @@
         name,
         amount,
         category,
-        payFrom: getSelectedPayFrom(),
+        payFrom,
         note: document.getElementById("note").value.trim(),
         ...readTelegramMeta()
       };
