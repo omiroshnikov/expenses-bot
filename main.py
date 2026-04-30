@@ -34,9 +34,7 @@ WEBHOOK_PATH = "/tg"
 WEBHOOK_URL = f"{BASE_URL}{WEBHOOK_PATH}" if BASE_URL else None
 
 GAS_EXEC_URL = os.environ.get("GAS_EXEC_URL", "").strip()
-WEBAPP_KEY = os.environ.get("WEBAPP_KEY", "").strip()
-FORM_ACCESS_KEY = os.environ.get("FORM_ACCESS_KEY", "").strip() or WEBAPP_KEY
-GAS_FORM_URL = os.environ.get("GAS_FORM_URL", "").strip()
+FORM_ACCESS_KEY = os.environ.get("FORM_ACCESS_KEY", "").strip()
 STATIC_FORM_URL = os.environ.get("STATIC_FORM_URL", "").strip()
 SKIP_WEBHOOK_SET = os.environ.get("SKIP_WEBHOOK_SET", "").strip().lower() in {"1", "true", "yes"}
 
@@ -49,18 +47,11 @@ def with_query_params(base_url: str, params: dict[str, str]) -> str:
 
 
 def build_webapp_url() -> str | None:
-    # 1) GitHub Pages (или иной static host) + динамические gas_url/k из env
-    if STATIC_FORM_URL:
-        if GAS_EXEC_URL and FORM_ACCESS_KEY:
-            return with_query_params(STATIC_FORM_URL, {"gas_url": GAS_EXEC_URL, "k": FORM_ACCESS_KEY})
-        return STATIC_FORM_URL
-    # 2) Прямой URL формы на GAS (legacy/fallback)
-    if GAS_FORM_URL:
-        return GAS_FORM_URL
-    # 3) Локальный fallback на Render testapp
-    if BASE_URL and WEBAPP_KEY:
-        return f"{BASE_URL}/testapp?v=2&k={WEBAPP_KEY}"
-    return None
+    # Единственная поддерживаемая схема:
+    # Telegram -> STATIC_FORM_URL (GitHub Pages) -> GAS /exec.
+    if not STATIC_FORM_URL or not GAS_EXEC_URL or not FORM_ACCESS_KEY:
+        return None
+    return with_query_params(STATIC_FORM_URL, {"gas_url": GAS_EXEC_URL, "k": FORM_ACCESS_KEY})
 
 
 WEBAPP_URL = build_webapp_url()
@@ -184,8 +175,6 @@ async def on_startup(app: web.Application):
     logging.info("GAS_EXEC_URL set: %s", bool(GAS_EXEC_URL))
     logging.info("FORM_ACCESS_KEY set: %s", bool(FORM_ACCESS_KEY))
     logging.info("STATIC_FORM_URL set: %s", bool(STATIC_FORM_URL))
-    logging.info("GAS_FORM_URL set: %s", bool(GAS_FORM_URL))
-    logging.info("WEBAPP_KEY set: %s", bool(WEBAPP_KEY))
 
 async def is_duplicate_submit(submit_id: str) -> bool:
     now = time.time()
@@ -209,53 +198,7 @@ def main():
     async def health(_req: web.Request):
         return web.Response(text="ok")
 
-    async def app_page(_req: web.Request):
-        return web.FileResponse("webapp.html")
-
-    async def submit(req: web.Request):
-        # защита "только для меня": проверяем ключ из url
-        k = req.query.get("k", "")
-        if not WEBAPP_KEY or k != WEBAPP_KEY:
-            return web.json_response({"ok": False, "error": "bad key"}, status=403)
-
-        try:
-            payload = await req.json()
-        except Exception:
-            return web.json_response({"ok": False, "error": "bad json"}, status=400)
-
-        ddmmyy = ymd_to_ddmmyy(str(payload.get("date", "")))
-        name = str(payload.get("name", "")).strip()
-        amount = str(payload.get("amount", "")).strip()
-        category = str(payload.get("category", "")).strip()
-        pay_from = str(payload.get("payFrom", "")).strip()
-        note = str(payload.get("note", "")).strip()
-        submit_id = str(payload.get("submit_id", "")).strip()
-
-        if not name:
-            return web.json_response({"ok": False, "error": "empty name"}, status=400)
-        if not amount:
-            return web.json_response({"ok": False, "error": "empty amount"}, status=400)
-        if not category:
-            return web.json_response({"ok": False, "error": "empty category"}, status=400)
-
-        if submit_id and await is_duplicate_submit(submit_id):
-            return web.json_response({"ok": True, "duplicate": True, "submit_id": submit_id})
-
-        line = ";".join([ddmmyy, name, amount, category, pay_from, note]).rstrip(";")
-        logging.info("SUBMIT line: %s", line)
-
-        # пишем в sheet через gas, chat_id/message_id берём "виртуальные"
-        status, body = await forward_to_gas(line, ADMIN_ID, int(payload.get("_mid", 1)), None)
-        logging.info("GAS_RESP(submit): %s %s", status, body)
-
-        if status != 200:
-            return web.json_response({"ok": False, "error": f"gas {status}", "body": body}, status=502)
-
-        return web.json_response({"ok": True, "line": line})
-
     app.router.add_get("/health", health)
-    app.router.add_get("/testapp", app_page)
-    app.router.add_post("/submit", submit)
 
     SimpleRequestHandler(dp, bot).register(app, path=WEBHOOK_PATH)
     setup_application(app, dp, bot=bot)
