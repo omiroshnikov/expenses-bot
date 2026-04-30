@@ -201,9 +201,8 @@
         commonLocked = true;
       } else {
         commonLocked = false;
-        const ok = ["общий", "Олег", "Женя"];
-        const noCat = !String(categoryValue || "").trim();
-        if (noCat || !ok.includes(selectedCommon)) selectedCommon = defaultCommonByUserId();
+        // При пустом правиле всегда заново ставим дефолт по user id.
+        selectedCommon = defaultCommonByUserId();
       }
       renderCommonPills();
     }
