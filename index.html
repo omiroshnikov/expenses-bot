@@ -18,6 +18,9 @@
     .pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
     .pill { border: 1px solid #d9d9d9; border-radius: 999px; padding: 7px 10px; background: #f6f7f9; font-size: 14px; cursor: pointer; }
     .pill.active { background: #2aabee; border-color: #2aabee; color: #fff; }
+    .hidden { display: none; }
+    .checksRow { display: flex; gap: 14px; align-items: center; margin-top: 6px; }
+    .checksRow label { margin: 0; font-size: 14px; display: inline-flex; gap: 6px; align-items: center; }
     #date { min-height: 46px; padding: 10px 12px; font-size: 16px; }
     #submitBtn { width: 100%; margin-top: 10px; min-height: 0; padding: 11px 12px; font-size: 16px; border: 0; border-radius: 12px; background: #2aabee; color: #fff; font-weight: 600; touch-action: manipulation; display: block; }
     #submitBtn[disabled] { opacity: .7; cursor: not-allowed; }
@@ -35,17 +38,27 @@
       <button class="quickDateBtn" type="button" id="yesterday">вчера</button>
     </div>
 
-    <label>наименование *</label>
-    <input id="name" placeholder="кофе">
-
-    <label>сумма *</label>
-    <input id="amount" inputmode="decimal" placeholder="460">
-
     <label>категория *</label>
     <div id="categoryPills" class="pills"></div>
     <select id="category" required>
       <option value="">выбери</option>
     </select>
+
+    <label>наименование *</label>
+    <input id="name" placeholder="кофе">
+    <select id="nameLookup" class="hidden">
+      <option value="">выбери</option>
+    </select>
+    <input id="nameOther" class="hidden" placeholder="уточнение для прочее (необязательно)">
+
+    <label>сумма *</label>
+    <input id="amount" inputmode="decimal" placeholder="460">
+
+    <div class="checksRow">
+      <label><input type="checkbox" id="ciOverall">общий</label>
+      <label><input type="checkbox" id="ciOleg">Олег</label>
+      <label><input type="checkbox" id="ciZhenya">Женя</label>
+    </div>
 
     <label>откуда платил</label>
     <div id="payFromPills" class="pills"></div>
@@ -68,6 +81,8 @@
     let isSubmitting = false;
     let selectedCategory = "";
     let selectedPayFrom = "";
+    let nameLookupByCategory = {};
+    let commonByCategory = {};
 
     function iso(d) {
       const z = (n) => String(n).padStart(2, "0");
@@ -132,6 +147,89 @@
       }
     }
 
+    function setCommonChoice(value, { lock } = { lock: false }) {
+      const c1 = document.getElementById("ciOverall");
+      const c2 = document.getElementById("ciOleg");
+      const c3 = document.getElementById("ciZhenya");
+      c1.checked = value === "общий";
+      c2.checked = value === "Олег";
+      c3.checked = value === "Женя";
+      c1.disabled = lock;
+      c2.disabled = lock;
+      c3.disabled = lock;
+    }
+
+    function bindCommonChecks() {
+      const checks = ["ciOverall", "ciOleg", "ciZhenya"];
+      checks.forEach((id) => {
+        document.getElementById(id).addEventListener("change", (e) => {
+          if (!e.target.checked) {
+            e.target.checked = true;
+            return;
+          }
+          checks.filter(x => x !== id).forEach((other) => {
+            document.getElementById(other).checked = false;
+          });
+        });
+      });
+    }
+
+    function getCommonIndivSelected() {
+      if (document.getElementById("ciOverall").checked) return "общий";
+      if (document.getElementById("ciOleg").checked) return "Олег";
+      if (document.getElementById("ciZhenya").checked) return "Женя";
+      return "";
+    }
+
+    function applyCommonByCategory(categoryValue) {
+      const mapped = String(commonByCategory[categoryValue] || "").trim();
+      if (mapped === "общ" || mapped === "общий") return setCommonChoice("общий", { lock: true });
+      if (mapped === "Олег") return setCommonChoice("Олег", { lock: true });
+      if (mapped === "Женя") return setCommonChoice("Женя", { lock: true });
+      const uid = getUserId();
+      setCommonChoice(uid === "188357399" ? "Женя" : "Олег", { lock: false });
+    }
+
+    function applyNameLookupByCategory(categoryValue) {
+      const options = Array.isArray(nameLookupByCategory[categoryValue]) ? nameLookupByCategory[categoryValue] : [];
+      const nameInput = document.getElementById("name");
+      const lookup = document.getElementById("nameLookup");
+      const other = document.getElementById("nameOther");
+      if (!options.length) {
+        lookup.classList.add("hidden");
+        other.classList.add("hidden");
+        nameInput.classList.remove("hidden");
+        applyCategoryAutofill(categoryValue);
+        return;
+      }
+      fillSelect("nameLookup", options, "выбери");
+      lookup.classList.remove("hidden");
+      nameInput.classList.add("hidden");
+      other.classList.add("hidden");
+      lookup.value = "";
+      other.value = "";
+      lookup.onchange = () => {
+        if (lookup.value === "прочее") {
+          other.classList.remove("hidden");
+        } else {
+          other.classList.add("hidden");
+        }
+      };
+    }
+
+    function getNameValue() {
+      const nameInput = document.getElementById("name");
+      const lookup = document.getElementById("nameLookup");
+      const other = document.getElementById("nameOther");
+      if (!lookup.classList.contains("hidden")) {
+        const pick = String(lookup.value || "").trim();
+        if (pick !== "прочее") return pick;
+        const manual = String(other.value || "").trim();
+        return manual || "прочее";
+      }
+      return String(nameInput.value || "").trim();
+    }
+
     function getUserId() {
       const initDataUser = tg?.initDataUnsafe?.user || {};
       return String(initDataUser.id || "");
@@ -163,6 +261,8 @@
         const categories = Array.isArray(cfg.categories) ? cfg.categories : [];
         const payFrom = Array.isArray(cfg.payFrom) ? cfg.payFrom : [];
         const defaultPayFrom = String(cfg.defaultPayFrom || "");
+        nameLookupByCategory = cfg.nameLookupByCategory || {};
+        commonByCategory = cfg.commonByCategory || {};
 
         const catPills = categories.slice(0, 6);
         const catRest = categories.slice(6);
@@ -170,7 +270,8 @@
           renderPills("categoryPills", catPills, selectedCategory, (v) => {
             selectedCategory = v;
             document.getElementById("category").value = "";
-            applyCategoryAutofill(v);
+            applyNameLookupByCategory(v);
+            applyCommonByCategory(v);
             redrawCategoryPills();
           });
         };
@@ -178,7 +279,9 @@
         redrawCategoryPills();
         document.getElementById("category").onchange = (e) => {
           selectedCategory = "";
-          applyCategoryAutofill(String(e.target.value || "").trim());
+          const v = String(e.target.value || "").trim();
+          applyNameLookupByCategory(v);
+          applyCommonByCategory(v);
           redrawCategoryPills();
         };
 
@@ -202,6 +305,7 @@
           selectedPayFrom = "";
           redrawPayPills();
         };
+        applyCommonByCategory("");
       } catch (_e) {
         setHint("не удалось загрузить техлист");
       }
@@ -225,10 +329,11 @@
         return;
       }
 
-      const name = document.getElementById("name").value.trim();
+      const name = getNameValue();
       const amount = normalizeAmount(document.getElementById("amount").value);
       const category = getSelectedCategory();
       const payFrom = getSelectedPayFrom();
+      const commonIndiv = getCommonIndivSelected();
 
       if (!name) return setHint("введи наименование");
       if (!amount) return setHint("введи сумму");
@@ -244,6 +349,7 @@
         amount,
         category,
         payFrom,
+        commonIndiv,
         note: document.getElementById("note").value.trim(),
         ...readTelegramMeta()
       };
@@ -274,6 +380,7 @@
       document.getElementById("date").value = iso(d);
     };
     document.getElementById("submitBtn").onclick = submit;
+    bindCommonChecks();
     initDynamicOptions();
 
     if (tg) {
