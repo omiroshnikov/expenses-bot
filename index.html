@@ -19,8 +19,11 @@
     .pill { border: 1px solid #d9d9d9; border-radius: 999px; padding: 7px 10px; background: #f6f7f9; font-size: 14px; cursor: pointer; }
     .pill.active { background: #2aabee; border-color: #2aabee; color: #fff; }
     .hidden { display: none; }
-    .checksRow { display: flex; gap: 14px; align-items: center; margin-top: 6px; }
-    .checksRow label { margin: 0; font-size: 14px; display: inline-flex; gap: 6px; align-items: center; }
+    label.commonLabel { font-size: 15px; margin-top: 6px; }
+    .commonPills { display: flex; flex-wrap: nowrap; gap: 6px; margin: 4px 0 10px; align-items: stretch; }
+    .pill--choice { flex: 1 1 0; min-width: 0; padding: 0 8px; min-height: 38px; height: 38px; font-size: 15px; line-height: 1.15; border-radius: 10px; touch-action: manipulation; box-sizing: border-box; cursor: pointer; border: 1px solid #d9d9d9; background: #f6f7f9; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pill--choice.active { background: #2aabee; border-color: #2aabee; color: #fff; }
+    .pill--choice:disabled { opacity: .42; cursor: default; pointer-events: none; }
     #date { min-height: 46px; padding: 10px 12px; font-size: 16px; }
     #submitBtn { width: 100%; margin-top: 10px; min-height: 0; padding: 11px 12px; font-size: 16px; border: 0; border-radius: 12px; background: #2aabee; color: #fff; font-weight: 600; touch-action: manipulation; display: block; }
     #submitBtn[disabled] { opacity: .7; cursor: not-allowed; }
@@ -54,11 +57,8 @@
     <label>сумма *</label>
     <input id="amount" inputmode="decimal" placeholder="460">
 
-    <div class="checksRow">
-      <label><input type="checkbox" id="ciOverall">общий</label>
-      <label><input type="checkbox" id="ciOleg">Олег</label>
-      <label><input type="checkbox" id="ciZhenya">Женя</label>
-    </div>
+    <label class="commonLabel">общий / Олег / Женя</label>
+    <div id="commonPills" class="pills commonPills"></div>
 
     <label>откуда платил</label>
     <div id="payFromPills" class="pills"></div>
@@ -83,6 +83,8 @@
     let selectedPayFrom = "";
     let nameLookupByCategory = {};
     let commonByCategory = {};
+    let selectedCommon = "Олег";
+    let commonLocked = false;
 
     function iso(d) {
       const z = (n) => String(n).padStart(2, "0");
@@ -140,6 +142,10 @@
       return selectedPayFrom || document.getElementById("payFrom").value.trim();
     }
 
+    function techNorm(s) {
+      return String(s || "").trim().toLowerCase();
+    }
+
     function applyCategoryAutofill(categoryValue) {
       const nameEl = document.getElementById("name");
       if (!nameEl.value.trim() && categoryValue) {
@@ -147,51 +153,85 @@
       }
     }
 
-    function setCommonChoice(value, { lock } = { lock: false }) {
-      const c1 = document.getElementById("ciOverall");
-      const c2 = document.getElementById("ciOleg");
-      const c3 = document.getElementById("ciZhenya");
-      c1.checked = value === "общий";
-      c2.checked = value === "Олег";
-      c3.checked = value === "Женя";
-      c1.disabled = lock;
-      c2.disabled = lock;
-      c3.disabled = lock;
+    function commonMappedForCategory(categoryValue) {
+      const cat = String(categoryValue || "").trim();
+      if (!cat) return "";
+      if (Object.prototype.hasOwnProperty.call(commonByCategory, cat)) {
+        const v = commonByCategory[cat];
+        const s = v === undefined || v === null ? "" : String(v).trim();
+        if (s !== "") return s;
+      }
+      const k = Object.keys(commonByCategory).find((x) => techNorm(x) === techNorm(cat));
+      return k !== undefined ? String(commonByCategory[k] ?? "").trim() : "";
     }
 
-    function bindCommonChecks() {
-      const checks = ["ciOverall", "ciOleg", "ciZhenya"];
-      checks.forEach((id) => {
-        document.getElementById(id).addEventListener("change", (e) => {
-          if (!e.target.checked) {
-            e.target.checked = true;
-            return;
-          }
-          checks.filter(x => x !== id).forEach((other) => {
-            document.getElementById(other).checked = false;
-          });
-        });
+    function interpretTechCommonRaw(raw) {
+      const n = techNorm(raw);
+      if (!n) return null;
+      if (n === "общ" || n === "общий") return { value: "общий", lock: true };
+      if (n === "олег") return { value: "Олег", lock: true };
+      if (n === "женя") return { value: "Женя", lock: true };
+      return null;
+    }
+
+    function defaultCommonByUserId() {
+      return getUserId() === "188357399" ? "Женя" : "Олег";
+    }
+
+    function renderCommonPills() {
+      const el = document.getElementById("commonPills");
+      el.innerHTML = "";
+      [
+        { v: "общий", lab: "общий" },
+        { v: "Олег", lab: "Олег" },
+        { v: "Женя", lab: "Женя" }
+      ].forEach(({ v, lab }) => {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "pill pill--choice";
+        const active = selectedCommon === v;
+        if (active) btn.classList.add("active");
+        btn.disabled = commonLocked && !active;
+        btn.textContent = lab;
+        btn.onclick = () => {
+          if (commonLocked || btn.disabled) return;
+          selectedCommon = v;
+          renderCommonPills();
+        };
+        el.appendChild(btn);
       });
     }
 
     function getCommonIndivSelected() {
-      if (document.getElementById("ciOverall").checked) return "общий";
-      if (document.getElementById("ciOleg").checked) return "Олег";
-      if (document.getElementById("ciZhenya").checked) return "Женя";
-      return "";
+      return selectedCommon;
     }
 
     function applyCommonByCategory(categoryValue) {
-      const mapped = String(commonByCategory[categoryValue] || "").trim();
-      if (mapped === "общ" || mapped === "общий") return setCommonChoice("общий", { lock: true });
-      if (mapped === "Олег") return setCommonChoice("Олег", { lock: true });
-      if (mapped === "Женя") return setCommonChoice("Женя", { lock: true });
-      const uid = getUserId();
-      setCommonChoice(uid === "188357399" ? "Женя" : "Олег", { lock: false });
+      const parsed = interpretTechCommonRaw(commonMappedForCategory(categoryValue));
+      if (parsed) {
+        selectedCommon = parsed.value;
+        commonLocked = true;
+      } else {
+        commonLocked = false;
+        const ok = ["общий", "Олег", "Женя"];
+        const noCat = !String(categoryValue || "").trim();
+        if (noCat || !ok.includes(selectedCommon)) selectedCommon = defaultCommonByUserId();
+      }
+      renderCommonPills();
+    }
+
+    /** Субстатьи: только строки техлиста, где «Статья_main» = категории (без учёта регистра). Ключи с GAS — lowerCase. */
+    function nameOptionsForCategory(categoryValue) {
+      const k = techNorm(categoryValue);
+      if (!k) return [];
+      const direct = nameLookupByCategory[k];
+      if (Array.isArray(direct) && direct.length) return direct;
+      const legacy = Object.keys(nameLookupByCategory).find((x) => techNorm(x) === k);
+      return Array.isArray(nameLookupByCategory[legacy]) ? nameLookupByCategory[legacy] : [];
     }
 
     function applyNameLookupByCategory(categoryValue) {
-      const options = Array.isArray(nameLookupByCategory[categoryValue]) ? nameLookupByCategory[categoryValue] : [];
+      const options = nameOptionsForCategory(categoryValue);
       const nameInput = document.getElementById("name");
       const lookup = document.getElementById("nameLookup");
       const other = document.getElementById("nameOther");
@@ -202,6 +242,7 @@
         applyCategoryAutofill(categoryValue);
         return;
       }
+      nameInput.value = "";
       fillSelect("nameLookup", options, "выбери");
       lookup.classList.remove("hidden");
       nameInput.classList.add("hidden");
@@ -380,7 +421,7 @@
       document.getElementById("date").value = iso(d);
     };
     document.getElementById("submitBtn").onclick = submit;
-    bindCommonChecks();
+    renderCommonPills();
     initDynamicOptions();
 
     if (tg) {
