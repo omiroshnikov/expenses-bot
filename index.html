@@ -10,20 +10,17 @@
     body { font-family: -apple-system, system-ui, sans-serif; width: 100%; padding: 12px 14px; margin: 0; background: #fff; color: #111; box-sizing: border-box; }
     .container { width: 100%; margin: 0; }
     h2 { margin: 2px 0 8px; font-size: 19px; line-height: 1.25; font-weight: 700; }
-    label { display: block; margin: 8px 0 4px; opacity: .95; font-size: 16px; }
+    label { display: block; margin: 8px 0 4px; opacity: .95; font-size: 16px; font-weight: 600; }
     input, select { width: 100%; min-height: 46px; padding: 10px 12px; font-size: 16px; box-sizing: border-box; border: 1px solid #d9d9d9; border-radius: 10px; background: #fff; }
     .dateRow { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
     .dateRow #date { flex: 1; }
     .quickDateBtn { min-height: 40px; padding: 10px; font-size: 14px; border-radius: 10px; border: 1px solid #d9d9d9; background: #f6f7f9; touch-action: manipulation; white-space: nowrap; }
     .pills { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
-    .pill { border: 1px solid #d9d9d9; border-radius: 999px; padding: 7px 10px; background: #f6f7f9; font-size: 14px; cursor: pointer; }
+    .pill { border: 1px solid #d9d9d9; border-radius: 999px; padding: 7px 10px; min-height: 36px; background: #f6f7f9; font-size: 14px; cursor: pointer; touch-action: manipulation; box-sizing: border-box; }
     .pill.active { background: #2aabee; border-color: #2aabee; color: #fff; }
+    .pill:disabled { opacity: 0.45; cursor: default; }
     .hidden { display: none; }
-    label.commonLabel { font-size: 15px; margin-top: 6px; }
-    .commonPills { display: flex; flex-wrap: nowrap; gap: 6px; margin: 4px 0 10px; align-items: stretch; }
-    .pill--choice { flex: 1 1 0; min-width: 0; padding: 0 8px; min-height: 38px; height: 38px; font-size: 15px; line-height: 1.15; border-radius: 10px; touch-action: manipulation; box-sizing: border-box; cursor: pointer; border: 1px solid #d9d9d9; background: #f6f7f9; color: #111; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .pill--choice.active { background: #2aabee; border-color: #2aabee; color: #fff; }
-    .pill--choice:disabled { opacity: .42; cursor: default; pointer-events: none; }
+    label.commonLabel { font-size: 16px; margin-top: 6px; font-weight: 600; }
     #date { min-height: 46px; padding: 10px 12px; font-size: 16px; }
     #submitBtn { width: 100%; margin-top: 10px; min-height: 0; padding: 11px 12px; font-size: 16px; border: 0; border-radius: 12px; background: #2aabee; color: #fff; font-weight: 600; touch-action: manipulation; display: block; }
     #submitBtn[disabled] { opacity: .7; cursor: not-allowed; }
@@ -58,7 +55,7 @@
     <input id="amount" inputmode="decimal" placeholder="460">
 
     <label class="commonLabel">общий / Олег / Женя</label>
-    <div id="commonPills" class="pills commonPills"></div>
+    <div id="commonPills" class="pills"></div>
 
     <label>откуда платил</label>
     <div id="payFromPills" class="pills"></div>
@@ -153,16 +150,12 @@
       }
     }
 
+    /** Сервер отдаёт commonByCategory с ключами normTechKey (lowerCase), значение — сырой текст из «общ_индив» (может быть пусто). */
     function commonMappedForCategory(categoryValue) {
-      const cat = String(categoryValue || "").trim();
-      if (!cat) return "";
-      if (Object.prototype.hasOwnProperty.call(commonByCategory, cat)) {
-        const v = commonByCategory[cat];
-        const s = v === undefined || v === null ? "" : String(v).trim();
-        if (s !== "") return s;
-      }
-      const k = Object.keys(commonByCategory).find((x) => techNorm(x) === techNorm(cat));
-      return k !== undefined ? String(commonByCategory[k] ?? "").trim() : "";
+      const k = techNorm(categoryValue);
+      if (!k) return "";
+      const v = commonByCategory[k];
+      return v !== undefined && v !== null ? String(v).trim() : "";
     }
 
     function interpretTechCommonRaw(raw) {
@@ -181,18 +174,13 @@
     function renderCommonPills() {
       const el = document.getElementById("commonPills");
       el.innerHTML = "";
-      [
-        { v: "общий", lab: "общий" },
-        { v: "Олег", lab: "Олег" },
-        { v: "Женя", lab: "Женя" }
-      ].forEach(({ v, lab }) => {
+      ["общий", "Олег", "Женя"].forEach((v) => {
         const btn = document.createElement("button");
         btn.type = "button";
-        btn.className = "pill pill--choice";
+        btn.className = `pill${selectedCommon === v ? " active" : ""}`;
         const active = selectedCommon === v;
-        if (active) btn.classList.add("active");
         btn.disabled = commonLocked && !active;
-        btn.textContent = lab;
+        btn.textContent = v;
         btn.onclick = () => {
           if (commonLocked || btn.disabled) return;
           selectedCommon = v;
@@ -220,7 +208,7 @@
       renderCommonPills();
     }
 
-    /** Субстатьи: только строки техлиста, где «Статья_main» = категории (без учёта регистра). Ключи с GAS — lowerCase. */
+    /** Субстатьи по «Статья_main» (см. GAS). Ключи — lowerCase нормализация категории из списка «Статья». */
     function nameOptionsForCategory(categoryValue) {
       const k = techNorm(categoryValue);
       if (!k) return [];
@@ -346,7 +334,9 @@
           selectedPayFrom = "";
           redrawPayPills();
         };
-        applyCommonByCategory("");
+        const cur = getSelectedCategory();
+        applyNameLookupByCategory(cur);
+        applyCommonByCategory(cur);
       } catch (_e) {
         setHint("не удалось загрузить техлист");
       }
