@@ -3,6 +3,7 @@ import json
 import logging
 import time
 import asyncio
+from urllib.parse import urlencode, urlsplit, urlunsplit, parse_qsl
 from aiohttp import web, ClientSession
 
 from aiogram import Bot, Dispatcher, F
@@ -34,12 +35,35 @@ WEBHOOK_URL = f"{BASE_URL}{WEBHOOK_PATH}" if BASE_URL else None
 
 GAS_EXEC_URL = os.environ.get("GAS_EXEC_URL", "").strip()
 WEBAPP_KEY = os.environ.get("WEBAPP_KEY", "").strip()
+FORM_ACCESS_KEY = os.environ.get("FORM_ACCESS_KEY", "").strip() or WEBAPP_KEY
 GAS_FORM_URL = os.environ.get("GAS_FORM_URL", "").strip()
 STATIC_FORM_URL = os.environ.get("STATIC_FORM_URL", "").strip()
 SKIP_WEBHOOK_SET = os.environ.get("SKIP_WEBHOOK_SET", "").strip().lower() in {"1", "true", "yes"}
 
-# Предпочитаем статическую форму (GitHub Pages), затем GAS, затем fallback на Render.
-WEBAPP_URL = STATIC_FORM_URL or GAS_FORM_URL or (f"{BASE_URL}/testapp?v=2&k={WEBAPP_KEY}" if BASE_URL else None)
+def with_query_params(base_url: str, params: dict[str, str]) -> str:
+    parts = urlsplit(base_url)
+    existing = dict(parse_qsl(parts.query, keep_blank_values=True))
+    existing.update({k: v for k, v in params.items() if v})
+    query = urlencode(existing)
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, query, parts.fragment))
+
+
+def build_webapp_url() -> str | None:
+    # 1) GitHub Pages (или иной static host) + динамические gas_url/k из env
+    if STATIC_FORM_URL:
+        if GAS_EXEC_URL and FORM_ACCESS_KEY:
+            return with_query_params(STATIC_FORM_URL, {"gas_url": GAS_EXEC_URL, "k": FORM_ACCESS_KEY})
+        return STATIC_FORM_URL
+    # 2) Прямой URL формы на GAS (legacy/fallback)
+    if GAS_FORM_URL:
+        return GAS_FORM_URL
+    # 3) Локальный fallback на Render testapp
+    if BASE_URL and WEBAPP_KEY:
+        return f"{BASE_URL}/testapp?v=2&k={WEBAPP_KEY}"
+    return None
+
+
+WEBAPP_URL = build_webapp_url()
 
 bot = Bot(BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
@@ -158,6 +182,7 @@ async def on_startup(app: web.Application):
 
     logging.info("WEBAPP_URL: %s", WEBAPP_URL)
     logging.info("GAS_EXEC_URL set: %s", bool(GAS_EXEC_URL))
+    logging.info("FORM_ACCESS_KEY set: %s", bool(FORM_ACCESS_KEY))
     logging.info("STATIC_FORM_URL set: %s", bool(STATIC_FORM_URL))
     logging.info("GAS_FORM_URL set: %s", bool(GAS_FORM_URL))
     logging.info("WEBAPP_KEY set: %s", bool(WEBAPP_KEY))
