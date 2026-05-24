@@ -387,16 +387,51 @@
       setSubmittingState(true);
       setHint("отправляю...");
 
+      const t0 = performance.now();
+      const logTiming = (label) => {
+        console.log("[submit]", label, Math.round(performance.now() - t0) + "ms");
+      };
+      logTiming("submit clicked");
+
+      const fetchOpts = {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
+        body: new URLSearchParams({ payload: JSON.stringify(payload) })
+      };
+
       try {
-        const body = new URLSearchParams({ payload: JSON.stringify(payload) });
-        await fetch(gasUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8" },
-          body,
-          mode: "no-cors"
-        });
-        setTimeout(() => tg?.close?.(), 250);
+        logTiming("request sent");
+        let resp;
+        try {
+          resp = await fetch(gasUrl, { ...fetchOpts, mode: "cors" });
+        } catch (_corsErr) {
+          resp = await fetch(gasUrl, { ...fetchOpts, mode: "no-cors" });
+        }
+        logTiming("response received");
+
+        let ok = false;
+        if (resp && resp.type !== "opaque" && resp.ok) {
+          try {
+            const data = await resp.json();
+            ok = Boolean(data && data.ok);
+            if (data && data._timing) console.log("[submit] server timing", data._timing);
+          } catch (_jsonErr) {
+            ok = true;
+          }
+        } else if (resp && resp.type === "opaque") {
+          ok = true;
+        }
+
+        logTiming("total");
+        if (ok) {
+          setHint("готово");
+          tg?.close?.();
+        } else {
+          setSubmittingState(false);
+          setHint("ошибка отправки, попробуй ещё раз");
+        }
       } catch (_e) {
+        logTiming("total (error)");
         setSubmittingState(false);
         setHint("ошибка сети, попробуй ещё раз");
       }
