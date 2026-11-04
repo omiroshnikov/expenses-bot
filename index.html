@@ -241,7 +241,7 @@
       const withoutPinned = (Array.isArray(values) ? values : [])
         .filter((v) => techNorm(v) !== techNorm(PINNED_PAY_FROM));
       return {
-        pills: [PINNED_PAY_FROM, ...withoutPinned.slice(0, 4)],
+        pills: [...withoutPinned.slice(0, 4), PINNED_PAY_FROM],
         lookup: withoutPinned.slice(4)
       };
     }
